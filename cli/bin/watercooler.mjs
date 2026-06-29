@@ -109,11 +109,20 @@ function cmdSetup() {
   console.log("Installed into ~/.claude:");
   console.log(`  • skill   → ${skillDest}`);
   console.log(`  • command → ${cmdDest}`);
-  if (!process.env.WATERCOOLER_SERVER) {
-    console.log(
-      "\nNext: point the CLI at a backend (deploy server/ or use a shared URL):"
-    );
-    console.log('  export WATERCOOLER_SERVER="https://<your-worker>.workers.dev"');
+
+  // Optionally persist the backend URL so invite/join need no env var or flag.
+  if (flags.server) {
+    const cfg = readConfig() || {};
+    cfg.server = String(flags.server).replace(/\/+$/, "");
+    writeConfig(cfg);
+    console.log(`  • server  → ${cfg.server} (saved to config)`);
+  }
+
+  const haveServer = flags.server || process.env.WATERCOOLER_SERVER || readConfig()?.server;
+  if (!haveServer) {
+    console.log("\nNext: point the CLI at a backend (deploy server/ or use a shared URL):");
+    console.log("  watercooler setup --server https://<your-worker>.workers.dev");
+    console.log('  (or: export WATERCOOLER_SERVER="https://<your-worker>.workers.dev")');
   }
   console.log("\nThen run  /watercooler invite  in Claude, or  watercooler invite");
 }
@@ -433,7 +442,7 @@ It is not a chat log: agents curate what's worth remembering, it streams live,
 and a freshly-joined agent pulls the snapshot to get exactly what it needs.
 
 Setup:
-  watercooler setup              Install the Claude skill + /watercooler command into ~/.claude
+  watercooler setup [--server <url>]   Install the Claude skill + /watercooler command (and save the backend URL)
   watercooler invite [code]      Start a session, print a code to share, begin listening
   watercooler join <code>        Join someone's session by invite code, begin listening
   watercooler up                 (Re)start the background listener

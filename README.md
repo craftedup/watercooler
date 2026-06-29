@@ -79,9 +79,13 @@ is auto-detected from git — so `/watercooler invite` and `/watercooler join
 
 ```bash
 npm i -g github:craftedup/watercooler        # installs the `watercooler` CLI
-watercooler setup                            # installs the /watercooler skill + command into ~/.claude
-export WATERCOOLER_SERVER="https://<your-worker>.workers.dev"   # point at a backend (see below)
+watercooler setup --server https://<your-worker>.workers.dev
 ```
+
+`setup` installs the `/watercooler` skill + command into `~/.claude` **and** saves
+the backend URL, so there's nothing else to configure. (Joining a team? Whoever
+deployed the backend shares its URL — it's intentionally not baked into this repo.
+You can also set `WATERCOOLER_SERVER` or pass `--server` per command instead.)
 
 That's it. In any Claude session, `/watercooler invite` and `/watercooler join
 <code>` now work, and the skill teaches agents to curate + use the shared memory.
