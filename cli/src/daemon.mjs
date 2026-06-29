@@ -1,5 +1,6 @@
-// Long-lived subscriber. Holds the WebSocket open and writes every inbound
-// event to the local inbox so the agent (via `watercooler read`) can drain it.
+// Long-lived subscriber. Holds the WebSocket open and streams memory deltas
+// into the local inbox so the agent (via `watercooler read`) can drain them.
+// It also mirrors the full current memory + presence to local files.
 import fs from "node:fs";
 import WebSocket from "ws";
 import { paths, requireConfig, wsUrlFor, ensureHome } from "./lib.mjs";
@@ -7,7 +8,8 @@ import { paths, requireConfig, wsUrlFor, ensureHome } from "./lib.mjs";
 ensureHome();
 const cfg = requireConfig();
 
-const seen = new Set(); // seq numbers already written to the inbox
+const seen = new Set(); // mem-event seqs already written to the inbox
+let memory = {}; // id -> entry (mirror of shared memory)
 let ws = null;
 let pingTimer = null;
 let reconnectDelay = 1000;
@@ -24,8 +26,19 @@ function appendInbox(evt) {
   fs.appendFileSync(paths.inbox, JSON.stringify(evt) + "\n");
 }
 
+function writeMemory() {
+  const entries = Object.values(memory).sort((a, b) => a.ts - b.ts);
+  fs.writeFileSync(paths.memory, JSON.stringify({ entries, ts: Date.now() }, null, 2));
+}
+
 function writeState(agents) {
   fs.writeFileSync(paths.state, JSON.stringify({ agents, ts: Date.now() }, null, 2));
+}
+
+function applyMem(evt) {
+  if (evt.op === "del") delete memory[evt.id];
+  else if (evt.op === "set" && evt.entry) memory[evt.entry.id] = evt.entry;
+  writeMemory();
 }
 
 function connect() {
@@ -52,19 +65,22 @@ function connect() {
       return;
     }
     if (m.type === "pong") return;
-    if (m.type === "history") {
-      for (const evt of m.messages || []) appendInbox(evt);
+    if (m.type === "snapshot") {
+      // Full state on (re)connect: mirror it, but don't replay as deltas.
+      memory = {};
+      for (const e of m.entries || []) memory[e.id] = e;
+      writeMemory();
       if (m.agents) writeState(m.agents);
       return;
     }
     if (m.type === "presence") {
       writeState(m.agents || []);
-      // Also drop a marker into the inbox so the agent can notice joins/leaves.
       appendInbox({ type: "presence", ts: m.ts, agents: m.agents || [] });
       return;
     }
-    if (m.type === "chat" || m.type === "status") {
-      appendInbox(m);
+    if (m.type === "mem") {
+      applyMem(m);
+      appendInbox(m); // streamed delta the agent can drain with `read`
     }
   });
 

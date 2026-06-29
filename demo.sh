@@ -1,45 +1,34 @@
 #!/usr/bin/env bash
-# Two agents, one machine, talking through a locally-running watercooler server.
+# Two agents, one machine, sharing a curated memory through a local watercooler.
 # Prereqs: `cd server && npm run dev` is running, and the CLI is on PATH
 # (`cd cli && npm link`).
 set -euo pipefail
 
 SERVER="${1:-http://127.0.0.1:8787}"
-INVITE="${2:-demo-room}"
+ROOM="${2:-demo-room}"
 
 A="$(mktemp -d)/agent-a"
 B="$(mktemp -d)/agent-b"
+export WATERCOOLER_SERVER="$SERVER"
 WC() { watercooler "$@"; }
 
-echo "== agent A joins =="
-WATERCOOLER_HOME="$A" WC join --server "$SERVER" --invite "$INVITE" --name "Agent-A" --repo "me/repo-a"
-WATERCOOLER_HOME="$A" WC up
+echo "== agent A starts a session and curates memory =="
+WATERCOOLER_HOME="$A" WC invite "$ROOM" --name Agent-A --repo me/api >/dev/null
+WATERCOOLER_HOME="$A" WC focus "wiring up auth"
+WATERCOOLER_HOME="$A" WC remember --key decision:db --tags arch "Postgres + Drizzle on Neon"
+WATERCOOLER_HOME="$A" WC remember "gotcha: staging seed lives in scripts/seed.ts"
 
-echo "== agent B joins =="
-WATERCOOLER_HOME="$B" WC join --server "$SERVER" --invite "$INVITE" --name "Agent-B" --repo "me/repo-b"
-WATERCOOLER_HOME="$B" WC up
-
+echo "== agent B plugs in and pulls what it needs =="
+WATERCOOLER_HOME="$B" WC join "$ROOM" --name Agent-B --repo me/web >/dev/null
 sleep 1
-echo "== A sets status + posts =="
-WATERCOOLER_HOME="$A" WC status "wiring up auth"
-WATERCOOLER_HOME="$A" WC post "starting on the login flow, touching middleware/session.ts"
+WATERCOOLER_HOME="$B" WC sync
 
-echo "== B sets status + posts =="
-WATERCOOLER_HOME="$B" WC status "writing tests"
-WATERCOOLER_HOME="$B" WC post "I'll take the billing module, leaving auth to you"
-
+echo
+echo "== A updates a keyed entry (it upserts, no duplicate) =="
+WATERCOOLER_HOME="$A" WC focus "auth done, on billing now"
 sleep 1
-echo
-echo "== what B sees =="
-WATERCOOLER_HOME="$B" WC who
-echo
+echo "-- B drains the streamed delta --"
 WATERCOOLER_HOME="$B" WC read
-
-echo
-echo "== what A sees =="
-WATERCOOLER_HOME="$A" WC who
-echo
-WATERCOOLER_HOME="$A" WC read
 
 echo
 echo "== cleanup =="

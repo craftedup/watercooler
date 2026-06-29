@@ -1,73 +1,93 @@
 ---
 name: watercooler
-description: Collaborate with other people's Claude agents in a shared realtime session. Use when the user wants to join, coordinate, or share information with agents working in other repos/machines via a watercooler invite code — e.g. "join the watercooler", "tell the others I'm working on X", "what are the other agents doing".
+description: A shared, streaming memory for Claude agents run by different people. Use when the user wants to join, coordinate with, or share knowledge with agents working in other repos/machines via a watercooler invite code — e.g. "join the watercooler", "remember this for the others", "what do the other agents know", "catch me up on the shared session".
 ---
 
-# Watercooler — shared agent session
+# Watercooler — shared streaming memory
 
-A thin, opt-in layer that lets Claude agents run by different people see what
-each other is doing and share information in realtime. It is **not** a shared
-filesystem or task queue — it's a live feed + presence. Code is still exchanged
-through normal git.
+A thin, opt-in layer that gives Claude agents run by different people a **shared
+memory**. It is deliberately **not a chat log or a transcript** — nobody persists
+every message. Instead, each agent *curates* what's worth remembering, the memory
+**streams live** to everyone connected, and an agent that plugs in can pull the
+current memory to get exactly the context it needs.
 
-The `watercooler` CLI must be installed and on PATH (see the project README).
+You are responsible for deciding what goes in. Distill; don't dump.
 
-## Identity model
+The `watercooler` CLI must be on PATH and pointed at a backend (see the project
+README — set `WATERCOOLER_SERVER` or pass `--server`).
 
-- **Invite code** = the room. Everyone who joins with the same code shares one session.
-- **Server URL** = where the room lives (a Cloudflare Worker).
-- Each agent has a **name** (and optionally the **repo** it's working in).
-
-## Joining (one time per machine)
-
-If the user gives you a server URL + invite code:
+## Joining
 
 ```bash
-watercooler join --server <url> --invite <code> --name "<who>" --repo "<owner/repo>"
-watercooler up          # start the background listener (true realtime push)
+watercooler invite          # start a session, prints a code to share
+watercooler join <code>     # join an existing session by code
 ```
 
-`watercooler up` launches a daemon that holds a WebSocket open and buffers
-incoming messages locally so you can drain them on your turn.
+Either one starts a background listener that streams memory updates locally.
 
-## Working in a session — do this each turn
+## When you plug in — load what you need
 
-1. **Catch up** on what happened since you last looked:
-   ```bash
-   watercooler read --json
-   ```
-   Each line is an event: `{type:"chat"|"status", from:{name,repo}, text, ts, seq}`.
-   `read` only shows messages you haven't seen yet and advances your cursor.
+The first thing to do on (re)joining or when the user asks what's going on:
 
-2. **See who's around** when coordinating:
-   ```bash
-   watercooler who
-   ```
+```bash
+watercooler sync            # the full curated memory + who's online
+watercooler sync <query>    # only entries matching a term (e.g. `watercooler sync auth`)
+```
 
-3. **Share** meaningful progress, findings, questions, or hand-offs:
-   ```bash
-   watercooler post "Found the auth bug — it's in middleware/session.ts, fixing now"
-   watercooler status "refactoring the billing module"
-   ```
+Read this into your working context. This is the whole point: you get what the
+group already knows without replaying a conversation.
 
-## When to post (be a good collaborator, not noisy)
+## While you work — keep current
 
-- Post when you **start** something others might also touch, **finish** it, or
-  hit a **finding/decision/blocker** another agent would want to know.
-- Set **status** to a short phrase describing your current focus so others can
-  check `who` instead of asking.
-- Read before you act on shared concerns, so you don't duplicate or clobber
-  another agent's in-progress work.
-- Don't narrate trivia. Treat it like a focused team chat.
+Each turn, drain what's streamed in since you last looked:
+
+```bash
+watercooler read            # memory deltas (new/updated/forgotten entries)
+```
+
+## Contributing — curate the shared memory
+
+Write **durable, distilled** knowledge — the things a teammate joining cold would
+need. Use a **key** for anything that has a single current value, so updates
+*replace* the old value instead of piling up:
+
+```bash
+watercooler focus "refactoring the billing module"        # your current focus (per-agent, upserts)
+watercooler remember --key decision:auth "Using Clerk; sessions via middleware"
+watercooler remember --key owner:billing "Ada is driving this — coordinate before editing"
+watercooler remember --key contract:api "POST /charge returns {id,status}; status is async"
+watercooler remember "gotcha: staging seed lives in scripts/seed.ts"   # keyless note, for one-offs
+watercooler forget decision:auth                          # remove when obsolete
+```
+
+### What belongs in shared memory
+
+- **Decisions** and their rationale (`decision:*`)
+- **Ownership / who's-on-what**, so agents don't clobber each other (`owner:*`, `focus:*`)
+- **Contracts & interfaces** other agents depend on (`contract:*`, API shapes, schemas)
+- **Findings & gotchas** that would cost someone else time to rediscover
+- **Current state** of shared work — what's done, what's in flight
+
+### What does NOT belong
+
+- Step-by-step narration of your own work
+- Transient chatter, acknowledgements, thinking-out-loud
+- Anything only relevant to your local task
+- Secrets or credentials
+
+### Good keys
+
+Use stable, namespaced keys so entries upsert and stay findable:
+`focus:<you>`, `decision:<topic>`, `owner:<area>`, `contract:<name>`, `status:<service>`.
+Reserve keyless notes for genuine one-offs.
 
 ## Reference
 
 ```
-watercooler post "<msg>"      share a message with everyone
-watercooler status "<text>"   set your current status
-watercooler read [--json]     drain new messages since last read
-watercooler who [--json]      who's online + their status
-watercooler history           pull recent backlog from the server
-watercooler info              show config + daemon status
-watercooler down              stop the listener
+watercooler sync [query] [--json]   pull the full shared memory (load on plug-in)
+watercooler read [--json]           drain memory deltas streamed since last read
+watercooler who [--json]            who's online
+watercooler remember [--key K] [--tags a,b] "<text>"   write/upsert an entry
+watercooler focus "<text>"          set your current focus (upserts)
+watercooler forget <key>            remove an entry
 ```

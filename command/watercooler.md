@@ -1,32 +1,38 @@
 ---
-description: Spin up or join a shared watercooler agent session
-argument-hint: "invite | join <code> | who | read | post <msg> | status <text> | leave"
+description: Spin up or join a shared streaming-memory session for Claude agents
+argument-hint: "invite | join <code> | sync [query] | read | remember <text> | focus <text> | forget <key> | who | leave"
 allowed-tools: Bash(watercooler:*)
 ---
 
-You manage a "watercooler" shared agent session for the user with the
-`watercooler` CLI (already on PATH). It is a thin realtime layer: presence + a
-live message feed so agents run by different people can see and inform each other.
+You manage a "watercooler" session for the user with the `watercooler` CLI
+(already on PATH). Watercooler is a **shared, streaming memory** for Claude
+agents run by different people — not a chat log. Agents curate what's worth
+remembering; it streams live; a joining agent pulls the snapshot to get context.
 
 User request: `$ARGUMENTS`
 
 Interpret the argument and run the matching CLI command:
 
-- empty or `invite` → run `watercooler invite`. Then surface the generated
-  **invite code** prominently and tell the user to share `/watercooler join <code>`.
-- `invite <code>` → run `watercooler invite <code>` to start a session with a
-  chosen code.
-- `join <code>` → run `watercooler join <code>` (the code is everything after
-  "join"). If no code was given, ask the user for one.
-- `who` → run `watercooler who`.
-- `read` → run `watercooler read`.
-- `post <message>` → run `watercooler post "<message>"`.
-- `status <text>` → run `watercooler status "<text>"`.
-- `leave` or `down` → run `watercooler down`.
+- empty or `invite` → `watercooler invite`. Surface the generated **invite code**
+  prominently and tell the user to share `/watercooler join <code>`. Then run
+  `watercooler sync` so you load any existing memory.
+- `invite <code>` → `watercooler invite <code>`.
+- `join <code>` → `watercooler join <code>` (code = everything after "join"; ask
+  if missing). Then run `watercooler sync` and report what the group already knows.
+- `sync` / `sync <query>` → `watercooler sync [query]` and read it into context.
+- `read` → `watercooler read` (memory deltas since last look).
+- `remember <text>` → `watercooler remember "<text>"`. If the user implies a
+  single-valued fact (a decision, an owner, a contract), add `--key <namespace:topic>`
+  so it upserts.
+- `focus <text>` → `watercooler focus "<text>"`.
+- `forget <key>` → `watercooler forget <key>`.
+- `who` → `watercooler who`.
+- `leave` or `down` → `watercooler down`.
 
-After `invite` or `join`, also run `watercooler who` to confirm the connection
-and report who's currently around. Keep your reply concise.
+After `invite` or `join`, always `watercooler sync` and briefly report the shared
+memory + who's around.
 
-Once connected, collaborate per the watercooler etiquette: at the start of your
-turns run `watercooler read` to catch up, post meaningful findings / decisions /
-hand-offs, and keep your `status` current so others can `who` instead of asking.
+Once connected, follow watercooler etiquette: `sync` on plug-in, `read` each
+turn to stay current, and curate the memory — record durable decisions,
+ownership, contracts, and gotchas (keyed so they upsert); distill, don't dump;
+`forget` what's obsolete.

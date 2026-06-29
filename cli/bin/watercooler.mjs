@@ -56,17 +56,22 @@ async function main() {
       return cmdUp();
     case "down":
       return cmdDown();
-    case "post":
-    case "say":
-      return cmdSend("chat");
-    case "status":
-      return cmdSend("status");
+    case "remember":
+    case "note":
+    case "post": // back-compat alias: a quick keyless note
+      return cmdRemember();
+    case "forget":
+      return cmdForget();
+    case "focus":
+    case "status": // back-compat alias: your current focus (a keyed entry)
+      return cmdFocus();
+    case "sync":
+    case "context":
+      return cmdSync();
     case "read":
       return cmdRead();
     case "who":
       return cmdWho();
-    case "history":
-      return cmdHistory();
     case "info":
       return cmdInfo();
     case "help":
@@ -123,7 +128,7 @@ function connect({ invite, server, name, repo, id }) {
   }
   // Switching rooms: clear local buffers so we don't mix sessions.
   if (existing.invite && existing.invite !== cfg.invite) {
-    for (const p of [paths.inbox, paths.cursor, paths.state]) {
+    for (const p of [paths.inbox, paths.cursor, paths.state, paths.memory]) {
       try {
         fs.unlinkSync(p);
       } catch {}
@@ -145,7 +150,7 @@ function cmdInvite() {
   console.log(`  ──────────────────────────────────────────`);
   console.log(`\n  Share this so others can join:`);
   console.log(`    /watercooler join ${cfg.invite}`);
-  console.log(`\n  You're listening for updates. See who's around:  watercooler who`);
+  console.log(`\n  Listening for memory updates. Load shared memory:  watercooler sync`);
 }
 
 function cmdJoin() {
@@ -158,7 +163,7 @@ function cmdJoin() {
   startDaemon();
   console.log(`Joined "${cfg.invite}" as ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}.`);
   console.log(`Server: ${cfg.server}`);
-  console.log(`Listening for updates. Catch up with:  watercooler read`);
+  console.log(`Load the shared memory with:  watercooler sync`);
 }
 
 function startDaemon() {
@@ -184,8 +189,8 @@ function startDaemon() {
 function cmdUp() {
   requireConfig();
   const pid = startDaemon();
-  console.log(`Listening for live updates (pid ${pid}).`);
-  console.log(`Drain new messages with:  watercooler read`);
+  console.log(`Listening for memory updates (pid ${pid}).`);
+  console.log(`Load shared memory: watercooler sync   ·   drain new deltas: watercooler read`);
 }
 
 function cmdDown() {
@@ -205,32 +210,66 @@ function cmdDown() {
   } catch {}
 }
 
-async function cmdSend(type) {
+async function postMem(cfg, body) {
+  const url = httpUrlFor(cfg, "/mem");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...body, from: { id: cfg.agentId, name: cfg.name, repo: cfg.repo || "" } }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+// remember [--key K] [--tags a,b] "<text>"   (note/post are keyless aliases)
+async function cmdRemember() {
   const cfg = requireConfig();
   const text = positionals.join(" ").trim() || (flags.text ? String(flags.text) : "");
   if (!text) {
-    console.error(`Usage: watercooler ${type === "status" ? "status" : "post"} "<message>"`);
+    console.error('Usage: watercooler remember [--key <key>] [--tags a,b] "<text>"');
     process.exit(1);
   }
-  const url = httpUrlFor(cfg, "/msg");
+  const key = flags.key ? String(flags.key) : null;
+  const tags = flags.tags ? String(flags.tags).split(",").map((t) => t.trim()).filter(Boolean) : [];
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        type,
-        text,
-        from: { id: cfg.agentId, name: cfg.name, repo: cfg.repo || "" },
-      }),
-    });
-    if (!res.ok) {
-      console.error(`Send failed: ${res.status} ${await res.text()}`);
-      process.exit(1);
-    }
-    const json = await res.json();
-    console.log(`${type === "status" ? "Status set" : "Posted"} (#${json.seq}).`);
+    const json = await postMem(cfg, { op: "set", key, text, tags });
+    console.log(key ? `Remembered "${key}" (#${json.seq}).` : `Noted (#${json.seq}).`);
   } catch (e) {
-    console.error(`Send failed: ${e.message}`);
+    console.error(`Failed: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+// forget <key>
+async function cmdForget() {
+  const cfg = requireConfig();
+  const key = positionals[0] || flags.key;
+  if (!key) {
+    console.error("Usage: watercooler forget <key>");
+    process.exit(1);
+  }
+  try {
+    const json = await postMem(cfg, { op: "del", key: String(key) });
+    console.log(json.removed ? `Forgot "${key}".` : `(nothing stored under "${key}")`);
+  } catch (e) {
+    console.error(`Failed: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+// focus "<text>" — your current focus, a per-agent keyed entry that upserts.
+async function cmdFocus() {
+  const cfg = requireConfig();
+  const text = positionals.join(" ").trim() || (flags.text ? String(flags.text) : "");
+  if (!text) {
+    console.error('Usage: watercooler focus "<what you\'re working on>"');
+    process.exit(1);
+  }
+  try {
+    const json = await postMem(cfg, { op: "set", key: `focus:${cfg.name}`, text, tags: ["focus"] });
+    console.log(`Focus set (#${json.seq}).`);
+  } catch (e) {
+    console.error(`Failed: ${e.message}`);
     process.exit(1);
   }
 }
@@ -269,7 +308,7 @@ function cmdRead() {
   if (flags.json) {
     for (const e of events) process.stdout.write(JSON.stringify(e) + "\n");
   } else if (events.length === 0) {
-    console.log("(no new messages)");
+    console.log("(no new memory updates)");
   } else {
     for (const e of events) console.log(fmtEvent(e, cfg));
   }
@@ -279,10 +318,12 @@ function cmdRead() {
 }
 
 function fmtEvent(e, cfg) {
+  const who = e.from?.name || "someone";
   const mine = e.from?.id === cfg.agentId ? " (you)" : "";
-  const tag = e.type === "status" ? "status" : "says";
-  const repo = e.from?.repo ? ` {${e.from.repo}}` : "";
-  return `[${fmtTime(e.ts)}] ${e.from?.name}${mine}${repo} ${tag}: ${e.text}`;
+  if (e.op === "del") return `[${fmtTime(e.ts)}] ${who}${mine} forgot "${e.id}"`;
+  const entry = e.entry || {};
+  const label = entry.key ? `"${entry.key}"` : "a note";
+  return `[${fmtTime(e.ts)}] ${who}${mine} remembered ${label}: ${entry.text}`;
 }
 
 function cmdWho() {
@@ -307,31 +348,43 @@ function cmdWho() {
   for (const a of state.agents) {
     const mine = a.id === cfg.agentId ? " (you)" : "";
     const repo = a.repo ? `  repo:${a.repo}` : "";
-    const status = a.status ? `  — ${a.status}` : "";
-    console.log(`  • ${a.name}${mine}${repo}${status}`);
+    console.log(`  • ${a.name}${mine}${repo}`);
   }
 }
 
-async function cmdHistory() {
+// sync [query] — pull the full curated shared memory (authoritative, from server).
+async function cmdSync() {
   const cfg = requireConfig();
-  const url = httpUrlFor(cfg, "/state");
+  const q = positionals.join(" ").trim();
+  const url = httpUrlFor(cfg, "/sync") + (q ? `&q=${encodeURIComponent(q)}` : "");
+  let json;
   try {
     const res = await fetch(url);
-    if (!res.ok) {
-      console.error(`History failed: ${res.status}`);
-      process.exit(1);
-    }
-    const json = await res.json();
-    if (flags.json) {
-      process.stdout.write(JSON.stringify(json) + "\n");
-      return;
-    }
-    for (const e of json.messages || []) console.log(fmtEvent(e, cfg));
-    console.log(`\nOnline: ${(json.agents || []).map((a) => a.name).join(", ") || "(nobody)"}`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    json = await res.json();
   } catch (e) {
-    console.error(`History failed: ${e.message}`);
+    console.error(`Sync failed: ${e.message}`);
     process.exit(1);
   }
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(json) + "\n");
+    return;
+  }
+  const entries = json.entries || [];
+  if (entries.length === 0) {
+    console.log(q ? `(no memory matching "${q}")` : "(shared memory is empty)");
+  } else {
+    console.log(`Shared memory (${entries.length}${q ? ` matching "${q}"` : ""}):`);
+    for (const e of entries) {
+      const mine = e.author?.id === cfg.agentId ? " (you)" : "";
+      const label = e.key ? `[${e.key}] ` : "";
+      const tags = e.tags?.length ? `  #${e.tags.join(" #")}` : "";
+      console.log(`  ${label}${e.text}`);
+      console.log(`      — ${e.author?.name}${mine}, ${fmtTime(e.ts)}${tags}`);
+    }
+  }
+  const online = (json.agents || []).map((a) => a.name).join(", ");
+  console.log(`\nOnline: ${online || "(nobody)"}`);
 }
 
 function cmdInfo() {
@@ -342,7 +395,10 @@ function cmdInfo() {
 }
 
 function printHelp() {
-  console.log(`watercooler — a thin shared session for Claude agents
+  console.log(`watercooler — a thin shared MEMORY for Claude agents
+
+It is not a chat log: agents curate what's worth remembering, it streams live,
+and a freshly-joined agent pulls the snapshot to get exactly what it needs.
 
 Setup:
   watercooler invite [code]      Start a session, print a code to share, begin listening
@@ -350,17 +406,18 @@ Setup:
   watercooler up                 (Re)start the background listener
   watercooler down               Stop the listener
 
-  Server defaults to the deployed backend; override with --server or WATERCOOLER_SERVER.
-  Name defaults to your username; repo is auto-detected from git. Override with --name/--repo.
+  Server from --server or WATERCOOLER_SERVER (no shared default — deploy your own).
+  Name defaults to your username; repo is auto-detected from git.
 
-Talk:
-  watercooler post "<message>"   Share something with everyone in the session
-  watercooler status "<text>"    Set your current status (what you're doing)
+Remember (curate the shared memory):
+  watercooler remember [--key K] [--tags a,b] "<text>"   Write/upsert an entry (note = keyless)
+  watercooler focus "<text>"                             Set your current focus (per-agent, upserts)
+  watercooler forget <key>                               Remove an entry
 
-Listen:
-  watercooler read [--json] [--all]   Drain new messages since you last read
-  watercooler who [--json]            Who's online + their status
-  watercooler history [--json]        Pull recent backlog from the server
+Recall:
+  watercooler sync [query] [--json]   Pull the full shared memory (what you need on plug-in)
+  watercooler read [--json] [--all]   Drain memory deltas streamed since you last read
+  watercooler who [--json]            Who's online
 
 Misc:
   watercooler info               Show config + daemon status

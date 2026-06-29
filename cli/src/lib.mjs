@@ -15,6 +15,7 @@ export const paths = {
   home: HOME,
   config: path.join(HOME, "config.json"),
   inbox: path.join(HOME, "inbox.ndjson"),
+  memory: path.join(HOME, "memory.json"),
   state: path.join(HOME, "state.json"),
   cursor: path.join(HOME, "cursor"),
   pid: path.join(HOME, "daemon.pid"),
