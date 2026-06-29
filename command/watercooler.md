@@ -16,9 +16,12 @@ Interpret the argument and run the matching CLI command:
 - empty or `invite` → `watercooler invite`. Surface the generated **invite code**
   prominently and tell the user to share `/watercooler join <code>`. Then run
   `watercooler sync` so you load any existing memory.
-- `invite <code>` → `watercooler invite <code>`.
-- `join <code>` → `watercooler join <code>` (code = everything after "join"; ask
-  if missing). Then run `watercooler sync` and report what the group already knows.
+- `invite <code>` → `watercooler invite <code>`. When the user wants to share/invite
+  others, give them the **invite link** it prints (it carries the server), not just the code.
+- `join <link-or-code>` → `watercooler join <arg>` (arg = everything after "join";
+  ask if missing). An invite link points the CLI at the right server automatically;
+  a bare code joins on the already-configured server. Then run `watercooler sync`
+  and report what the group already knows.
 - `sync` / `sync <query>` → `watercooler sync [query]` and read it into context.
 - `read` → `watercooler read` (memory deltas since last look).
 - `remember <text>` → `watercooler remember "<text>"`. If the user implies a

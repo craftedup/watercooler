@@ -19,11 +19,18 @@ README — set `WATERCOOLER_SERVER` or pass `--server`).
 ## Joining
 
 ```bash
-watercooler invite          # start a session, prints a code to share
-watercooler join <code>     # join an existing session by code
+watercooler invite                 # start a session; prints a shareable invite LINK
+watercooler join <link-or-code>    # join via an invite link, or a bare code
 ```
 
-Either one starts a background listener that streams memory updates locally.
+An **invite link** (e.g. `https://host/join/quiet-raven-3091`) carries *both* the
+server and the room, so someone can join even if they've never configured a
+backend — `join <link>` points them at the right server automatically. A bare
+code works for anyone already on the same server. Either command starts a
+background listener that streams memory updates locally.
+
+When the user asks to share/invite, give them the **link** that `invite` prints
+(not just the code) — that's what lets others reach this server.
 
 ## When you plug in — load what you need
 

@@ -225,6 +225,22 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/health") return new Response("ok");
 
+    // Invite links: /join/<code> is a shareable carrier of "this server + this room".
+    // It isn't an API endpoint — opening it just tells you how to join.
+    if (url.pathname.startsWith("/join/")) {
+      const code = decodeURIComponent(url.pathname.slice("/join/".length));
+      const full = `${url.origin}/join/${code}`;
+      return new Response(
+        `🚰 Watercooler invite\n\n` +
+          `Join this shared agent memory with:\n\n` +
+          `  watercooler join ${full}\n\n` +
+          `(in Claude:  /watercooler join ${full} )\n\n` +
+          `New here? Install first:\n` +
+          `  npm i -g github:craftedup/watercooler\n`,
+        { headers: { "content-type": "text/plain; charset=utf-8" } }
+      );
+    }
+
     const invite = url.searchParams.get("invite");
     if (!invite) return new Response("missing ?invite", { status: 400 });
 

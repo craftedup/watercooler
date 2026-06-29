@@ -23,8 +23,8 @@ Once installed and pointed at a backend (see below), drive everything from
 inside Claude:
 
 ```
-/watercooler invite            → start a session, print a code to share, begin listening
-/watercooler join <code>       → join someone's session by code
+/watercooler invite            → start a session, print a shareable invite link, begin listening
+/watercooler join <link|code>  → join via an invite link (carries the server) or a bare code
 /watercooler sync [query]      → pull the shared memory (load what you need on plug-in)
 /watercooler read              → drain memory updates streamed since you last looked
 /watercooler remember <text>   → add to the shared memory (agent keys single-valued facts)
@@ -77,18 +77,30 @@ is auto-detected from git — so `/watercooler invite` and `/watercooler join
 
 ## Install
 
+**Joining an existing session?** All you need is the invite link someone shares —
+it carries the server, so there's nothing to configure:
+
 ```bash
-npm i -g github:craftedup/watercooler        # installs the `watercooler` CLI
-watercooler setup --server https://<your-worker>.workers.dev
+npm i -g github:craftedup/watercooler
+watercooler join https://<their-worker>.workers.dev/join/<code>
 ```
 
-`setup` installs the `/watercooler` skill + command into `~/.claude` **and** saves
-the backend URL, so there's nothing else to configure. (Joining a team? Whoever
-deployed the backend shares its URL — it's intentionally not baked into this repo.
-You can also set `WATERCOOLER_SERVER` or pass `--server` per command instead.)
+**Starting your own?** Point it at a backend once with `init` (deploy one first —
+see [Deploy the backend](#deploy-the-backend)):
 
-That's it. In any Claude session, `/watercooler invite` and `/watercooler join
-<code>` now work, and the skill teaches agents to curate + use the shared memory.
+```bash
+npm i -g github:craftedup/watercooler
+watercooler init --server https://<your-worker>.workers.dev
+```
+
+`init` installs the `/watercooler` skill + command into `~/.claude` **and** saves
+the backend URL + your identity, so there's nothing else to configure. In any
+Claude session, `/watercooler invite` and `/watercooler join <link>` now work,
+and the skill teaches agents to curate + use the shared memory.
+
+> The server is intentionally **not** baked into this repo. Whoever deploys a
+> backend shares it — via an invite link (best) or an `init --server` line. You
+> can also set `WATERCOOLER_SERVER` or pass `--server` per command.
 You can also drive the CLI directly:
 
 ```bash
@@ -131,20 +143,21 @@ npm run deploy
 ```
 
 `wrangler deploy` prints your `https://watercooler.<your-subdomain>.workers.dev`
-URL. Point the CLI at it (add this to your shell profile so it sticks):
+URL. Point the CLI at it once:
 
 ```bash
-export WATERCOOLER_SERVER="https://watercooler.<your-subdomain>.workers.dev"
+watercooler init --server https://watercooler.<your-subdomain>.workers.dev
 ```
 
-Share that URL + an invite code with collaborators so they can do the same.
+Then `watercooler invite` prints an invite link you can share — it carries this
+server, so collaborators just `watercooler join <link>` and they're on it.
 
 ## CLI reference
 
 ```
-watercooler setup                           install the Claude skill + /watercooler command
-watercooler invite [code]                   start a session + print a code to share
-watercooler join <code> [--name <you>] [--repo <r>] [--server <url>]
+watercooler init [--server <url>]           first-time setup: skill + /watercooler command, save server + identity
+watercooler invite [code]                   start a session + print a shareable invite link
+watercooler join <link|code> [--name <you>] [--repo <r>] [--server <url>]
 watercooler up | down                       start / stop the live listener
 watercooler remember [--key K] [--tags a,b] "<text>"   write/upsert an entry
 watercooler focus "<text>"                  set your current focus (upserts)

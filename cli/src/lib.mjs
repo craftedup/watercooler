@@ -42,7 +42,12 @@ export function writeConfig(cfg) {
 export function requireConfig() {
   const cfg = readConfig();
   if (!cfg || !cfg.server || !cfg.invite) {
-    console.error("Not joined. Run:  watercooler join --server <url> --invite <code> --name <you>");
+    console.error(
+      "👋 You're not in a watercooler session yet.\n\n" +
+        "  • Have an invite link?   watercooler join <link>\n" +
+        "  • Starting fresh?        watercooler init --server <url>   then   watercooler invite\n" +
+        "  • First time setup?      watercooler init   (installs the /watercooler skill for Claude)\n"
+    );
     process.exit(1);
   }
   return cfg;

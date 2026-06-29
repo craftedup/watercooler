@@ -15,6 +15,7 @@ import {
   fmtTime,
   randomId,
   generateInvite,
+  origins,
   DEFAULT_SERVER,
 } from "../src/lib.mjs";
 
@@ -48,8 +49,9 @@ const { flags, positionals } = parseArgs(rest);
 
 async function main() {
   switch (cmd) {
+    case "init":
     case "setup":
-      return cmdSetup();
+      return cmdInit();
     case "invite":
       return cmdInvite();
     case "join":
@@ -88,9 +90,9 @@ async function main() {
   }
 }
 
-// Install the Claude skill + /watercooler slash command into ~/.claude so the
-// agent can drive watercooler. Copies from this package's bundled files.
-function cmdSetup() {
+// One-time onboarding: install the Claude skill + /watercooler command, and
+// save the backend URL + identity so every later command just works.
+function cmdInit() {
   const repoRoot = path.resolve(__dirname, "..", "..");
   const skillSrc = path.join(repoRoot, "skill", "watercooler");
   const cmdSrc = path.join(repoRoot, "command", "watercooler.md");
@@ -110,21 +112,28 @@ function cmdSetup() {
   console.log(`  • skill   → ${skillDest}`);
   console.log(`  • command → ${cmdDest}`);
 
-  // Optionally persist the backend URL so invite/join need no env var or flag.
-  if (flags.server) {
-    const cfg = readConfig() || {};
-    cfg.server = String(flags.server).replace(/\/+$/, "");
-    writeConfig(cfg);
-    console.log(`  • server  → ${cfg.server} (saved to config)`);
-  }
+  // Persist server (if given) + identity so later commands need no flags/env.
+  const cfg = readConfig() || {};
+  if (flags.server) cfg.server = String(flags.server).replace(/\/+$/, "");
+  if (flags.name) cfg.name = String(flags.name);
+  if (flags.repo !== undefined) cfg.repo = String(flags.repo);
+  cfg.name = cfg.name || defaultName();
+  cfg.repo = cfg.repo ?? detectRepo();
+  cfg.agentId = cfg.agentId || randomId();
+  writeConfig(cfg);
+  console.log(`  • identity → ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}`);
+  if (cfg.server) console.log(`  • server  → ${cfg.server} (saved)`);
 
-  const haveServer = flags.server || process.env.WATERCOOLER_SERVER || readConfig()?.server;
+  const haveServer = cfg.server || process.env.WATERCOOLER_SERVER;
   if (!haveServer) {
-    console.log("\nNext: point the CLI at a backend (deploy server/ or use a shared URL):");
-    console.log("  watercooler setup --server https://<your-worker>.workers.dev");
-    console.log('  (or: export WATERCOOLER_SERVER="https://<your-worker>.workers.dev")');
+    console.log("\nAlmost there — tell it which backend to use:");
+    console.log("  watercooler init --server https://<your-worker>.workers.dev");
+    console.log("  (or just `watercooler join <invite-link>` — a link carries its server)");
+  } else {
+    console.log("\nReady. Start or join a session:");
+    console.log("  watercooler invite            (or in Claude: /watercooler invite)");
+    console.log("  watercooler join <link|code>");
   }
-  console.log("\nThen run  /watercooler invite  in Claude, or  watercooler invite");
 }
 
 function defaultName() {
@@ -133,6 +142,35 @@ function defaultName() {
   } catch {
     return "agent";
   }
+}
+
+// An invite is shareable as a link that carries BOTH the server and the room
+// code, e.g. https://host/join/quiet-raven-3091. join accepts a link or a code.
+function inviteLink(cfg) {
+  const { httpUrl } = origins(cfg.server);
+  return `${httpUrl}/join/${encodeURIComponent(cfg.invite)}`;
+}
+
+// Parse a join target: a full invite link -> {server, code}; a bare code -> {code}.
+function parseJoinTarget(arg) {
+  if (/^(https?|wss?):\/\//i.test(arg)) {
+    try {
+      const u = new URL(arg);
+      let proto = u.protocol.replace(/:$/, "");
+      if (proto === "ws") proto = "http";
+      if (proto === "wss") proto = "https";
+      const server = `${proto}://${u.host}`;
+      let code = u.searchParams.get("invite");
+      if (!code) {
+        const segs = u.pathname.split("/").filter(Boolean);
+        code = segs[segs.length - 1] || "";
+      }
+      return { server, code: decodeURIComponent(code) };
+    } catch {
+      return { server: null, code: arg };
+    }
+  }
+  return { server: null, code: arg };
 }
 
 // Best-effort owner/repo from the current git remote, for the `repo` field.
@@ -189,21 +227,29 @@ function cmdInvite() {
   console.log(`  server:       ${cfg.server}`);
   console.log(`  you:          ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}`);
   console.log(`  ──────────────────────────────────────────`);
-  console.log(`\n  Share this so others can join:`);
+  console.log(`\n  Share to join (carries the server — works for anyone):`);
+  console.log(`    watercooler join ${inviteLink(cfg)}`);
+  console.log(`\n  Already on this server? Just the code works too:`);
   console.log(`    /watercooler join ${cfg.invite}`);
   console.log(`\n  Listening for memory updates. Load shared memory:  watercooler sync`);
 }
 
 function cmdJoin() {
-  const code = positionals[0] || flags.invite;
-  if (!code) {
-    console.error("Usage: watercooler join <invite-code> [--name <you>] [--server <url>]");
+  const arg = positionals[0] || flags.invite;
+  if (!arg) {
+    console.error("Usage: watercooler join <invite-link-or-code> [--name <you>] [--server <url>]");
     process.exit(1);
   }
-  const cfg = connect({ invite: code });
+  const { server, code } = parseJoinTarget(arg);
+  if (!code) {
+    console.error("Could not read an invite code from that link.");
+    process.exit(1);
+  }
+  // A link's server wins; otherwise fall back to --server/env/saved config.
+  const cfg = connect({ invite: code, server: server || undefined });
   startDaemon();
   console.log(`Joined "${cfg.invite}" as ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}.`);
-  console.log(`Server: ${cfg.server}`);
+  console.log(`On server: ${cfg.server}`);
   console.log(`Load the shared memory with:  watercooler sync`);
 }
 
@@ -431,7 +477,13 @@ async function cmdSync() {
 function cmdInfo() {
   const cfg = readConfig();
   console.log(`config dir: ${paths.home}`);
-  console.log(`config:     ${cfg ? JSON.stringify(cfg, null, 2) : "(not joined)"}`);
+  if (cfg?.server) console.log(`server:     ${cfg.server}`);
+  if (cfg?.invite) {
+    console.log(`room:       ${cfg.invite}`);
+    console.log(`as:         ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}`);
+    console.log(`invite:     ${inviteLink(cfg)}`);
+  }
+  if (!cfg?.server) console.log(`server:     (not set — see \`watercooler setup --server <url>\`)`);
   console.log(`daemon:     ${daemonRunning() ? "running (pid " + daemonRunning() + ")" : "stopped"}`);
 }
 
@@ -442,9 +494,9 @@ It is not a chat log: agents curate what's worth remembering, it streams live,
 and a freshly-joined agent pulls the snapshot to get exactly what it needs.
 
 Setup:
-  watercooler setup [--server <url>]   Install the Claude skill + /watercooler command (and save the backend URL)
-  watercooler invite [code]      Start a session, print a code to share, begin listening
-  watercooler join <code>        Join someone's session by invite code, begin listening
+  watercooler init [--server <url>]    First-time setup: install the /watercooler skill, save server + identity
+  watercooler invite [code]      Start a session, print a shareable invite link, begin listening
+  watercooler join <link|code>   Join via an invite link (carries the server) or a bare code
   watercooler up                 (Re)start the background listener
   watercooler down               Stop the listener
 
