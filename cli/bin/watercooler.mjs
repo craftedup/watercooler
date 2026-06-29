@@ -48,6 +48,8 @@ const { flags, positionals } = parseArgs(rest);
 
 async function main() {
   switch (cmd) {
+    case "setup":
+      return cmdSetup();
     case "invite":
       return cmdInvite();
     case "join":
@@ -84,6 +86,36 @@ async function main() {
       printHelp();
       process.exit(1);
   }
+}
+
+// Install the Claude skill + /watercooler slash command into ~/.claude so the
+// agent can drive watercooler. Copies from this package's bundled files.
+function cmdSetup() {
+  const repoRoot = path.resolve(__dirname, "..", "..");
+  const skillSrc = path.join(repoRoot, "skill", "watercooler");
+  const cmdSrc = path.join(repoRoot, "command", "watercooler.md");
+  if (!fs.existsSync(skillSrc) || !fs.existsSync(cmdSrc)) {
+    console.error(`Could not find bundled skill/command under ${repoRoot}.`);
+    process.exit(1);
+  }
+  const home = os.homedir();
+  const skillDest = path.join(home, ".claude", "skills", "watercooler");
+  const cmdDest = path.join(home, ".claude", "commands", "watercooler.md");
+  fs.mkdirSync(path.dirname(skillDest), { recursive: true });
+  fs.mkdirSync(path.dirname(cmdDest), { recursive: true });
+  fs.rmSync(skillDest, { recursive: true, force: true });
+  fs.cpSync(skillSrc, skillDest, { recursive: true });
+  fs.copyFileSync(cmdSrc, cmdDest);
+  console.log("Installed into ~/.claude:");
+  console.log(`  • skill   → ${skillDest}`);
+  console.log(`  • command → ${cmdDest}`);
+  if (!process.env.WATERCOOLER_SERVER) {
+    console.log(
+      "\nNext: point the CLI at a backend (deploy server/ or use a shared URL):"
+    );
+    console.log('  export WATERCOOLER_SERVER="https://<your-worker>.workers.dev"');
+  }
+  console.log("\nThen run  /watercooler invite  in Claude, or  watercooler invite");
 }
 
 function defaultName() {
@@ -401,6 +433,7 @@ It is not a chat log: agents curate what's worth remembering, it streams live,
 and a freshly-joined agent pulls the snapshot to get exactly what it needs.
 
 Setup:
+  watercooler setup              Install the Claude skill + /watercooler command into ~/.claude
   watercooler invite [code]      Start a session, print a code to share, begin listening
   watercooler join <code>        Join someone's session by invite code, begin listening
   watercooler up                 (Re)start the background listener

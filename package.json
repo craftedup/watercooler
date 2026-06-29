@@ -1,0 +1,26 @@
+{
+  "name": "@craftedup/watercooler",
+  "version": "0.1.0",
+  "description": "A shared, streaming memory for Claude agents run by different people — curate what's worth remembering, stream it live, and let any agent pull what it needs.",
+  "type": "module",
+  "bin": {
+    "watercooler": "cli/bin/watercooler.mjs"
+  },
+  "files": [
+    "cli",
+    "skill",
+    "command",
+    "README.md"
+  ],
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craftedup/watercooler.git"
+  },
+  "license": "MIT"
+}

@@ -75,52 +75,48 @@ is auto-detected from git — so `/watercooler invite` and `/watercooler join
   `watercooler read` on its turn.
 - **Writes are plain HTTP** (`remember`/`focus`/`forget`), independent of the daemon.
 
-## Quickstart (local)
-
-### 1. Install
+## Install
 
 ```bash
-cd server && npm install && cd ..
-cd cli && npm install && npm link && cd ..   # puts `watercooler` on PATH
+npm i -g github:craftedup/watercooler        # installs the `watercooler` CLI
+watercooler setup                            # installs the /watercooler skill + command into ~/.claude
+export WATERCOOLER_SERVER="https://<your-worker>.workers.dev"   # point at a backend (see below)
 ```
 
-### 2. Run the backend
+That's it. In any Claude session, `/watercooler invite` and `/watercooler join
+<code>` now work, and the skill teaches agents to curate + use the shared memory.
+You can also drive the CLI directly:
 
 ```bash
-cd server && npm run dev          # wrangler dev, serves on http://127.0.0.1:8787
-```
-
-### 3. Join from an agent
-
-```bash
-watercooler join team-alpha --server http://127.0.0.1:8787 --name "Sean's agent" --repo "me/myapp"
+watercooler invite
 watercooler remember --key decision:db "Postgres + Drizzle on Neon"
-watercooler focus "wiring up auth"
-watercooler sync          # see the full shared memory
-watercooler who
+watercooler sync
 ```
 
-### Two agents on one machine (demo)
-
-Use `WATERCOOLER_HOME` to give each agent its own config dir:
+Prefer no install? Run it one-off with npx:
 
 ```bash
-./demo.sh        # spins up two agents against a running `wrangler dev`
+npx github:craftedup/watercooler invite
 ```
 
-## Install (slash command + skill)
+> No backend yet? See [Deploy the backend](#deploy-the-backend) — it takes
+> seconds, then set `WATERCOOLER_SERVER` to the URL it prints. Everyone you
+> collaborate with points at the same URL.
 
-Install the CLI and symlink the slash command + skill into your Claude config:
+## Local development
 
 ```bash
-cd cli && npm install && npm link && cd ..     # puts `watercooler` on PATH
-mkdir -p ~/.claude/commands ~/.claude/skills
-ln -sf "$(pwd)/command/watercooler.md"  ~/.claude/commands/watercooler.md
-ln -sf "$(pwd)/skill/watercooler"        ~/.claude/skills/watercooler
+git clone https://github.com/craftedup/watercooler && cd watercooler
+npm install && npm link          # `watercooler` on PATH from your checkout
+cd server && npm install         # backend deps (for `npm run dev`)
 ```
 
-Now `/watercooler invite` and `/watercooler join <code>` work in any Claude
-session, and the skill teaches agents the collaboration etiquette automatically.
+Run the backend locally and try two agents on one machine:
+
+```bash
+cd server && npm run dev         # wrangler dev on http://127.0.0.1:8787
+./demo.sh                        # two agents sharing a memory (via WATERCOOLER_HOME)
+```
 
 ## Deploy the backend
 
@@ -142,6 +138,7 @@ Share that URL + an invite code with collaborators so they can do the same.
 ## CLI reference
 
 ```
+watercooler setup                           install the Claude skill + /watercooler command
 watercooler invite [code]                   start a session + print a code to share
 watercooler join <code> [--name <you>] [--repo <r>] [--server <url>]
 watercooler up | down                       start / stop the live listener
