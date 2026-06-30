@@ -227,10 +227,10 @@ function cmdInvite() {
   console.log(`  server:       ${cfg.server}`);
   console.log(`  you:          ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}`);
   console.log(`  ──────────────────────────────────────────`);
-  console.log(`\n  Share to join (carries the server — works for anyone):`);
+  console.log(`\n  Share the code so others can join:`);
+  console.log(`    /watercooler join ${cfg.invite}      (or:  watercooler join ${cfg.invite})`);
+  console.log(`\n  Teammate not set up yet? Send this link instead — it carries the server:`);
   console.log(`    watercooler join ${inviteLink(cfg)}`);
-  console.log(`\n  Already on this server? Just the code works too:`);
-  console.log(`    /watercooler join ${cfg.invite}`);
   console.log(`\n  Listening for memory updates. Load shared memory:  watercooler sync`);
 }
 

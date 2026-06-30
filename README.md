@@ -1,42 +1,75 @@
 # 🚰 watercooler
 
-A thin, opt-in **shared memory** for **Claude agents run by different people**.
-Each person points their agent at the same **server** with the same **invite
-code**, and their agents share what they learn — decisions, ownership, contracts,
-gotchas — in one live, curated memory.
+A shared, live **memory** for **Claude agents run by different people**. Point
+your agents at the same backend, and they share what they learn — decisions,
+ownership, contracts, gotchas — in one curated memory that streams in real time.
 
-It is deliberately **not a chat log or a transcript** — nobody persists every
-message. Instead, each agent *curates* what's worth remembering, the memory
-**streams live** to everyone connected, and an agent that plugs in can pull the
-current snapshot to get exactly the context it needs. Agents still exchange
-actual code through normal git — watercooler is the shared knowledge around it.
+It's **not a chat log**. Nobody persists every message. Each agent *curates* what's
+worth remembering, the memory streams live to everyone connected, and an agent
+that plugs in pulls the current snapshot to get exactly the context it needs.
+Code is still exchanged through normal git — watercooler is the knowledge around it.
 
-> **Bring your own backend.** watercooler ships with no shared server. Deploy
-> the Worker in `server/` to your own Cloudflare account (a few seconds — see
-> [Deploy the backend](#deploy-the-backend)), then point the CLI at it once with
-> the `WATERCOOLER_SERVER` env var. Everyone you collaborate with uses the same
-> server URL + an invite code.
+## Quick start
 
-## Use it (slash commands)
+### 1. Install
 
-Once installed and pointed at a backend (see below), drive everything from
-inside Claude:
-
-```
-/watercooler invite            → start a session, print a shareable invite link, begin listening
-/watercooler join <link|code>  → join via an invite link (carries the server) or a bare code
-/watercooler sync [query]      → pull the shared memory (load what you need on plug-in)
-/watercooler read              → drain memory updates streamed since you last looked
-/watercooler remember <text>   → add to the shared memory (agent keys single-valued facts)
-/watercooler focus <text>      → set your current focus (upserts in place)
-/watercooler forget <key>      → remove an entry
-/watercooler who               → who's online
-/watercooler leave             → stop listening
+```bash
+npm i -g github:craftedup/watercooler
 ```
 
-With `WATERCOOLER_SERVER` set, your name defaults to your username and the repo
-is auto-detected from git — so `/watercooler invite` and `/watercooler join
-<code>` are all anyone needs.
+### 2. Point it at a backend — once
+
+Everyone collaborating shares one backend. You only do this step a single time.
+
+```bash
+watercooler init --server https://your-team.workers.dev
+```
+
+This also installs the `/watercooler` skill + command into `~/.claude` and saves
+your identity (name from your username, repo from git).
+
+- **Got an invite link from a teammate?** Skip this step — `watercooler join <link>`
+  configures the server for you automatically (see below).
+- **No backend yet?** [Deploy one](#deploy-your-own-backend) in a few seconds, then
+  run the line above with the URL it prints.
+
+### 3. Use it — with plain invite codes
+
+Once the server is set, you just share and type **codes**:
+
+```bash
+watercooler invite                 # start a session → prints a code like `amber-otter-1234`
+watercooler join amber-otter-1234  # join a teammate's session by code
+```
+
+…or from inside Claude: `/watercooler invite`, `/watercooler join amber-otter-1234`.
+
+> **Why is there also a link?** A bare code says *which room* but not *which
+> server*. Step 2 tells your CLI the server once, so codes are all you need after
+> that. The invite **link** (`https://your-team.workers.dev/join/amber-otter-1234`)
+> just bundles the server + code into one thing — handy for someone who hasn't run
+> step 2 yet. For day-to-day use on a team, share the code.
+
+## Everyday commands
+
+```bash
+watercooler invite                 # start/host a session, get a code to share
+watercooler join <code>            # join by code (server already configured)
+
+watercooler sync [query]           # pull the shared memory — do this when you plug in
+watercooler read                   # drain updates streamed since you last looked
+watercooler who                    # who's online
+
+watercooler remember --key decision:auth "Using Clerk; sessions via middleware"
+watercooler focus "refactoring billing"   # your current focus (replaces in place)
+watercooler forget decision:auth           # remove an entry
+```
+
+Use a **key** for anything with a single current value (`decision:*`, `owner:*`,
+`contract:*`, `focus:<you>`) so updates replace the old value instead of piling
+up. Keyless `remember "…"` is for one-off notes. Distill — don't dump.
+
+## How it works
 
 ```
 ┌─────────────┐   WebSocket: memory deltas    ┌──────────────────────────┐
@@ -46,141 +79,79 @@ is auto-detected from git — so `/watercooler invite` and `/watercooler join
 └─────────────┘                                │   (one per invite code)  │
 ┌─────────────┐                                └──────────────────────────┘
 │  agent B    │ ◀───── snapshot on join ──────────────▲
-│  (other repo / other machine)
 └─────────────┘
 ```
 
-## Layout
-
-| Path | What |
-|------|------|
-| `server/` | Cloudflare Worker + `SessionRoom` Durable Object (the backend) |
-| `cli/`    | The `watercooler` CLI: daemon (WS subscriber) + `remember`/`sync`/`read` |
-| `skill/`  | A Claude skill that teaches agents to curate + use the shared memory |
-
-## How it works
-
-- **The invite code is the room key.** `idFromName(invite)` resolves to one
-  Durable Object instance; everyone with that code shares one memory.
-- **Memory, not transcript.** The DO stores a bounded set of curated *entries*.
-  Entries with a **key** upsert in place (so `focus:ada` or `decision:auth` has
-  one current value, not a growing pile); keyless notes are for one-offs and are
-  evicted oldest-first past the cap. The agent decides what's worth keeping.
-- **Plug in → pull the snapshot.** `watercooler sync` fetches the whole current
-  memory over HTTP, so a freshly-joined agent gets exactly what the group knows
-  without replaying anything. New WebSocket subscribers also receive a snapshot.
-- **Streamed live.** `watercooler up` runs a background daemon that holds a
-  socket open; the Worker pushes every memory delta (set/forget) to it. Because
-  Claude agents act in turns, the agent drains those deltas with
-  `watercooler read` on its turn.
+- **The invite code is the room key.** `idFromName(code)` resolves to one Durable
+  Object; everyone with that code shares one memory.
+- **Memory, not transcript.** The DO keeps a bounded set of curated *entries*.
+  Keyed entries upsert in place; keyless notes evict oldest-first past the cap.
+- **Plug in → snapshot.** `watercooler sync` fetches the whole current memory, so
+  a fresh agent gets what the group knows without replaying anything.
+- **Streamed live.** A background daemon (`watercooler up`, started automatically
+  by `invite`/`join`) holds a socket open; the Worker pushes every delta to it,
+  and the agent drains them with `watercooler read` on its turn.
 - **Writes are plain HTTP** (`remember`/`focus`/`forget`), independent of the daemon.
 
-## Install
+## Deploy your own backend
 
-**Joining an existing session?** All you need is the invite link someone shares —
-it carries the server, so there's nothing to configure:
-
-```bash
-npm i -g github:craftedup/watercooler
-watercooler join https://<their-worker>.workers.dev/join/<code>
-```
-
-**Starting your own?** Point it at a backend once with `init` (deploy one first —
-see [Deploy the backend](#deploy-the-backend)):
+The server is intentionally **not** baked into this repo — you run your own and
+share its URL with collaborators.
 
 ```bash
-npm i -g github:craftedup/watercooler
-watercooler init --server https://<your-worker>.workers.dev
+git clone https://github.com/craftedup/watercooler && cd watercooler
+cd server
+npx wrangler login          # interactive — run it yourself
+npm install && npm run deploy
 ```
 
-`init` installs the `/watercooler` skill + command into `~/.claude` **and** saves
-the backend URL + your identity, so there's nothing else to configure. In any
-Claude session, `/watercooler invite` and `/watercooler join <link>` now work,
-and the skill teaches agents to curate + use the shared memory.
-
-> The server is intentionally **not** baked into this repo. Whoever deploys a
-> backend shares it — via an invite link (best) or an `init --server` line. You
-> can also set `WATERCOOLER_SERVER` or pass `--server` per command.
-You can also drive the CLI directly:
-
-```bash
-watercooler invite
-watercooler remember --key decision:db "Postgres + Drizzle on Neon"
-watercooler sync
-```
-
-Prefer no install? Run it one-off with npx:
-
-```bash
-npx github:craftedup/watercooler invite
-```
-
-> No backend yet? See [Deploy the backend](#deploy-the-backend) — it takes
-> seconds, then set `WATERCOOLER_SERVER` to the URL it prints. Everyone you
-> collaborate with points at the same URL.
+`wrangler deploy` prints `https://watercooler.<your-subdomain>.workers.dev`. Hand
+that to your team's `watercooler init --server …`, and you're collaborating.
 
 ## Local development
 
 ```bash
 git clone https://github.com/craftedup/watercooler && cd watercooler
 npm install && npm link          # `watercooler` on PATH from your checkout
-cd server && npm install         # backend deps (for `npm run dev`)
+cd server && npm install         # backend deps
+
+# run the backend locally and try two agents on one machine:
+npm run dev                      # wrangler dev on http://127.0.0.1:8787
+cd .. && ./demo.sh               # two agents sharing a memory (via WATERCOOLER_HOME)
 ```
-
-Run the backend locally and try two agents on one machine:
-
-```bash
-cd server && npm run dev         # wrangler dev on http://127.0.0.1:8787
-./demo.sh                        # two agents sharing a memory (via WATERCOOLER_HOME)
-```
-
-## Deploy the backend
-
-```bash
-cd server
-npx wrangler login          # interactive, run it yourself in your terminal
-npm run deploy
-```
-
-`wrangler deploy` prints your `https://watercooler.<your-subdomain>.workers.dev`
-URL. Point the CLI at it once:
-
-```bash
-watercooler init --server https://watercooler.<your-subdomain>.workers.dev
-```
-
-Then `watercooler invite` prints an invite link you can share — it carries this
-server, so collaborators just `watercooler join <link>` and they're on it.
 
 ## CLI reference
 
 ```
-watercooler init [--server <url>]           first-time setup: skill + /watercooler command, save server + identity
-watercooler invite [code]                   start a session + print a shareable invite link
-watercooler join <link|code> [--name <you>] [--repo <r>] [--server <url>]
-watercooler up | down                       start / stop the live listener
-watercooler remember [--key K] [--tags a,b] "<text>"   write/upsert an entry
-watercooler focus "<text>"                  set your current focus (upserts)
-watercooler forget <key>                    remove an entry
+watercooler init [--server <url>]           first-time setup: install skill, save server + identity
+watercooler invite [code]                   start a session + print a code (and a shareable link)
+watercooler join <code|link>                join by code (server configured) or by invite link
 watercooler sync [query] [--json]           pull the full shared memory
 watercooler read [--json] [--all]           drain memory deltas since last read
+watercooler remember [--key K] [--tags a,b] "<text>"   write / upsert an entry
+watercooler focus "<text>"                  set your current focus (upserts)
+watercooler forget <key>                    remove an entry
 watercooler who [--json]                    who's online
-watercooler info                            show config + daemon status
+watercooler up | down                       start / stop the live listener
+watercooler info                            show config (server, room, identity) + daemon status
 ```
+
+Server resolution order: `--server` flag → `WATERCOOLER_SERVER` env → saved config.
+Run multiple agents on one machine with `WATERCOOLER_HOME=<dir>`.
 
 ## Security note (MVP)
 
 The invite code is the only secret — anyone with the code + server URL can join,
-read, and write memory. That's fine for trusted small groups. Hardening to add
-later: a signed token per member, rotating invites, and server-side `author`
-verification.
+read, and write memory. Fine for trusted groups. Hardening to add later: per-member
+tokens, rotating invites, and server-side `author` verification.
 
 ## Extension points
 
-- **Per-repo shared state.** The memory is generic; namespace keys per project
-  (e.g. a file-claim registry, `task:*` entries) for tighter coordination.
-- **Push into the session.** A Claude Code `Notification`/`Stop` hook could ping
+- **Per-repo shared state** — namespace keys per project (a file-claim registry,
+  `task:*` entries) for tighter coordination.
+- **Push into the session** — a Claude Code `Notification`/`Stop` hook could ping
   the agent when a high-priority entry lands, instead of turn-based draining.
-- **Summarized recall.** `sync` returns raw entries today; a server- or
-  agent-side summarization pass could compress large memories on plug-in.
-- **Auth.** Issue per-member tokens; verify `from` server-side.
+- **Summarized recall** — `sync` returns raw entries today; a summarization pass
+  could compress large memories on plug-in.
+- **Auth** — issue per-member tokens; verify `from` server-side.
+```
