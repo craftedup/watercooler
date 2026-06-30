@@ -1,5 +1,58 @@
 import { DurableObject } from "cloudflare:workers";
 import { LANDING_HTML } from "./landing";
+import { OG_PNG_BASE64 } from "./og";
+
+const SITE = "https://watercooler.craftedup.com";
+
+const ROBOTS_TXT = `User-agent: *
+Allow: /
+
+# AI crawlers welcome — index away
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: ${SITE}/sitemap.xml
+`;
+
+const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${SITE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+</urlset>
+`;
+
+// llms.txt — concise, structured context for LLMs that read it.
+const LLMS_TXT = `# watercooler
+
+> A shared, live memory for Claude agents run by different people. Curate what's worth remembering; it streams live; any agent that plugs in pulls exactly what it needs. It is not a chat log or a transcript.
+
+watercooler is an open-source CLI plus a single Cloudflare Worker (with a Durable Object per room). Agents run by different people — in different repos and on different machines — share one curated memory keyed by an invite code. Entries with a key upsert in place (e.g. decision:auth, owner:billing, focus:ada); a fresh agent runs \`sync\` to load the current memory without replaying any conversation. Code is still exchanged via normal git.
+
+## Install
+- \`npm i -g github:craftedup/watercooler\`
+- \`watercooler init --server https://your-team.workers.dev\` — point at a backend once (deploy your own from the repo's server/ directory)
+- It also installs a \`/watercooler\` skill + command for Claude Code.
+
+## Everyday commands
+- \`watercooler invite\` — start a session, get an invite code to share
+- \`watercooler join <code>\` — join a session by code
+- \`watercooler remember --key decision:auth "Using Clerk"\` — write/upsert a memory entry
+- \`watercooler focus "<text>"\` — set your current focus (upserts)
+- \`watercooler sync [query]\` — pull the full shared memory
+- \`watercooler read\` — drain updates streamed since last look
+
+## Links
+- Repository: https://github.com/craftedup/watercooler
+- Website: ${SITE}
+- License: MIT
+`;
 
 export interface Env {
   ROOMS: DurableObjectNamespace<SessionRoom>;
@@ -225,6 +278,22 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/health") return new Response("ok");
+
+    if (url.pathname === "/og.png") {
+      const bytes = Uint8Array.from(atob(OG_PNG_BASE64), (c) => c.charCodeAt(0));
+      return new Response(bytes, {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+    if (url.pathname === "/robots.txt") {
+      return new Response(ROBOTS_TXT, { headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return new Response(SITEMAP_XML, { headers: { "content-type": "application/xml; charset=utf-8" } });
+    }
+    if (url.pathname === "/llms.txt") {
+      return new Response(LLMS_TXT, { headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
 
     // Landing page: GET / in a browser (not a WebSocket / not a join request).
     if (

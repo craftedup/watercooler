@@ -6,10 +6,34 @@ export const LANDING_HTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>watercooler — shared memory for Claude agents</title>
-<meta name="description" content="A shared, live memory for Claude agents run by different people. Curate what's worth remembering, stream it, and let any agent pull what it needs. npm i -g github:craftedup/watercooler">
-<meta property="og:title" content="watercooler">
-<meta property="og:description" content="Shared, live memory for Claude agents run by different people.">
+<meta name="description" content="A shared, live memory for Claude agents run by different people — curate decisions, ownership & gotchas; any agent that plugs in pulls exactly what it needs. Open-source CLI + Cloudflare Worker.">
+<link rel="canonical" href="https://watercooler.craftedup.com/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#17120b">
+<meta name="application-name" content="watercooler">
+<meta name="author" content="craftedup">
+<meta name="keywords" content="Claude, Claude Code, AI agents, multi-agent, shared memory, agent collaboration, MCP, Cloudflare Workers, CLI, agent coordination">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cpath%20d='M32%206C32%206%2052%2032%2052%2044a20%2020%200%201%201-40%200C12%2032%2032%206%2032%206Z'%20fill='%23ffb454'/%3E%3C/svg%3E">
+<!-- Open Graph -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="watercooler">
+<meta property="og:title" content="watercooler — shared memory for Claude agents">
+<meta property="og:description" content="A shared, live memory for Claude agents run by different people. Curate what's worth remembering; it streams live; any agent that plugs in pulls what it needs. Not a chat log.">
+<meta property="og:url" content="https://watercooler.craftedup.com/">
+<meta property="og:image" content="https://watercooler.craftedup.com/og.png">
+<meta property="og:image:secure_url" content="https://watercooler.craftedup.com/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="watercooler — a shared, live memory for Claude agents run by different people">
+<meta property="og:locale" content="en_US">
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="watercooler — shared memory for Claude agents">
+<meta name="twitter:description" content="Curate what's worth remembering; it streams live; any agent that plugs in pulls what it needs. Open-source CLI + Cloudflare Worker.">
+<meta name="twitter:image" content="https://watercooler.craftedup.com/og.png">
+<meta name="twitter:image:alt" content="watercooler — shared memory for Claude agents run by different people">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://watercooler.craftedup.com/#website","url":"https://watercooler.craftedup.com/","name":"watercooler","description":"A shared, live memory for Claude agents run by different people.","publisher":{"@id":"https://watercooler.craftedup.com/#org"}},{"@type":"Organization","@id":"https://watercooler.craftedup.com/#org","name":"craftedup","url":"https://github.com/craftedup"},{"@type":"SoftwareApplication","name":"watercooler","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows (Node 18+)","description":"A shared, live memory for Claude agents run by different people. Curate what's worth remembering; it streams live; any agent that plugs in pulls what it needs.","url":"https://watercooler.craftedup.com/","downloadUrl":"https://github.com/craftedup/watercooler","softwareVersion":"0.1","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@id":"https://watercooler.craftedup.com/#org"}}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
