@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { LANDING_HTML } from "./landing";
 
 export interface Env {
   ROOMS: DurableObjectNamespace<SessionRoom>;
@@ -224,6 +225,17 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/health") return new Response("ok");
+
+    // Landing page: GET / in a browser (not a WebSocket / not a join request).
+    if (
+      url.pathname === "/" &&
+      req.headers.get("Upgrade") !== "websocket" &&
+      !url.searchParams.get("invite")
+    ) {
+      return new Response(LANDING_HTML, {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+      });
+    }
 
     // Invite links: /join/<code> is a shareable carrier of "this server + this room".
     // It isn't an API endpoint — opening it just tells you how to join.
