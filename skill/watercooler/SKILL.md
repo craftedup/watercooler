@@ -32,6 +32,10 @@ background listener that streams memory updates locally.
 When the user asks to share/invite, give them the **link** that `invite` prints
 (not just the code) — that's what lets others reach this server.
 
+If a command fails with **"unauthorized — set your token"**, the server is
+secured with a shared token. Ask the user for it and run
+`watercooler init --token <token>` once; the CLI then sends it automatically.
+
 ## When you plug in — load what you need
 
 The first thing to do on (re)joining or when the user asks what's going on:

@@ -79,6 +79,17 @@ export function httpUrlFor(cfg, path = "/msg") {
   return `${httpUrl}${path}?${q.toString()}`;
 }
 
+// The API token: env var wins, else saved config. Empty if the server is open.
+export function resolveToken(cfg) {
+  return process.env.WATERCOOLER_TOKEN || cfg?.token || "";
+}
+
+// Authorization header for fetch()/WebSocket when a token is configured.
+export function authHeaders(cfg) {
+  const t = resolveToken(cfg);
+  return t ? { Authorization: "Bearer " + t } : {};
+}
+
 export function daemonRunning() {
   try {
     const pid = parseInt(fs.readFileSync(paths.pid, "utf8").trim(), 10);

@@ -16,6 +16,7 @@ import {
   randomId,
   generateInvite,
   origins,
+  authHeaders,
   DEFAULT_SERVER,
 } from "../src/lib.mjs";
 
@@ -117,12 +118,14 @@ function cmdInit() {
   if (flags.server) cfg.server = String(flags.server).replace(/\/+$/, "");
   if (flags.name) cfg.name = String(flags.name);
   if (flags.repo !== undefined) cfg.repo = String(flags.repo);
+  if (flags.token) cfg.token = String(flags.token);
   cfg.name = cfg.name || defaultName();
   cfg.repo = cfg.repo ?? detectRepo();
   cfg.agentId = cfg.agentId || randomId();
   writeConfig(cfg);
   console.log(`  • identity → ${cfg.name}${cfg.repo ? ` (${cfg.repo})` : ""}`);
   if (cfg.server) console.log(`  • server  → ${cfg.server} (saved)`);
+  if (cfg.token) console.log(`  • token   → saved (sent on every request)`);
 
   const haveServer = cfg.server || process.env.WATERCOOLER_SERVER;
   if (!haveServer) {
@@ -197,6 +200,7 @@ function connect({ invite, server, name, repo, id }) {
     name: name || flags.name || existing.name || defaultName(),
     repo: repo ?? flags.repo ?? existing.repo ?? detectRepo(),
     agentId: id || flags.id || existing.agentId || randomId(),
+    token: flags.token ? String(flags.token) : existing.token,
   };
   if (!cfg.server) {
     console.error(
@@ -297,14 +301,22 @@ function cmdDown() {
   } catch {}
 }
 
+// Turn an HTTP status into a helpful, human error.
+function httpError(status) {
+  if (status === 401)
+    return "unauthorized — set your token:  watercooler init --token <token>  (ask your admin for it)";
+  if (status === 429) return "rate limited — try again in a moment";
+  return "server returned " + status;
+}
+
 async function postMem(cfg, body) {
   const url = httpUrlFor(cfg, "/mem");
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...authHeaders(cfg) },
     body: JSON.stringify({ ...body, from: { id: cfg.agentId, name: cfg.name, repo: cfg.repo || "" } }),
   });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(httpError(res.status));
   return res.json();
 }
 
@@ -446,8 +458,8 @@ async function cmdSync() {
   const url = httpUrlFor(cfg, "/sync") + (q ? `&q=${encodeURIComponent(q)}` : "");
   let json;
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`${res.status}`);
+    const res = await fetch(url, { headers: authHeaders(cfg) });
+    if (!res.ok) throw new Error(httpError(res.status));
     json = await res.json();
   } catch (e) {
     console.error(`Sync failed: ${e.message}`);
@@ -494,7 +506,7 @@ It is not a chat log: agents curate what's worth remembering, it streams live,
 and a freshly-joined agent pulls the snapshot to get exactly what it needs.
 
 Setup:
-  watercooler init [--server <url>]    First-time setup: install the /watercooler skill, save server + identity
+  watercooler init [--server <url>] [--token <t>]   First-time setup: install the /watercooler skill, save server + identity (+ token if the server is secured)
   watercooler invite [code]      Start a session, print a shareable invite link, begin listening
   watercooler join <link|code>   Join via an invite link (carries the server) or a bare code
   watercooler up                 (Re)start the background listener

@@ -150,13 +150,47 @@ cd server && npm install && npm run dev   # wrangler dev on http://127.0.0.1:878
 cd .. && ./demo.sh               # two agents sharing a memory (via WATERCOOLER_HOME)
 ```
 
-## Security note
+## Securing your server
 
-The invite code is the only secret today — anyone with the code + server URL can join, read, and write. Fine for trusted groups; per-member tokens and `author` verification are on the roadmap. Don't store secrets in the memory.
+The API (WebSocket, `/mem`, `/sync`) can be gated behind a **shared token**. The
+public pages (`/`, `/og.png`, `/robots.txt`, `/sitemap.xml`, `/llms.txt`,
+`/join/...`, `/health`) always stay open.
+
+**Admin — create the token (one time):** requires Cloudflare access to the account,
+so only you can create or rotate it. It's stored as a Worker secret, never in the repo.
+
+```bash
+cd server
+CLOUDFLARE_ACCOUNT_ID=<your-account> npm run secret:new
+```
+
+This prints a strong token once and installs it as `WATERCOOLER_TOKEN`. The moment
+it's set, the API rejects requests without it. (Secrets survive deploys; rotate by
+re-running the command.)
+
+**Everyone — use the token:** the value is what you distribute (out-of-band, like
+the server URL); Cloudflare access is *not* needed to use the API, only to change
+the key.
+
+```bash
+watercooler init --server https://watercooler.<you>.workers.dev --token <token>
+```
+
+The CLI sends it on every request (saved in `~/.watercooler/config.json`, or via
+the `WATERCOOLER_TOKEN` env var). Also on by default:
+
+- **Per-IP rate limiting** (120 requests/min) — blunts enumeration and abuse.
+- **Input caps** — entry text ≤ 8 KB, bounded keys/tags, request body ≤ 32 KB.
+
+Limitation: a *shared* token means no per-user attribution or individual
+revocation (all clients hold the same secret) — that's the next tier (per-person
+tokens). Don't store secrets in the memory itself.
 
 ## Roadmap
 
-- Per-member tokens + rotating invites
+- Per-member tokens + `author` verification (attribution, individual revocation)
+- Signed/expiring invite capabilities (read-only vs read-write scopes)
+- Per-repo namespaced state (file-claim registry, `task:*` entries)
 - Per-repo namespaced state (file-claim registry, `task:*` entries)
 - Push-into-session hook (ping the agent when high-priority entries land)
 - Summarized recall for large memories

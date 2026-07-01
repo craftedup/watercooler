@@ -3,7 +3,7 @@
 // It also mirrors the full current memory + presence to local files.
 import fs from "node:fs";
 import WebSocket from "ws";
-import { paths, requireConfig, wsUrlFor, ensureHome } from "./lib.mjs";
+import { paths, requireConfig, wsUrlFor, authHeaders, ensureHome } from "./lib.mjs";
 
 ensureHome();
 const cfg = requireConfig();
@@ -41,10 +41,26 @@ function applyMem(evt) {
   writeMemory();
 }
 
+let stopped = false;
+
 function connect() {
+  if (stopped) return;
   const url = wsUrlFor(cfg);
   log(`connecting to ${url}`);
-  ws = new WebSocket(url);
+  ws = new WebSocket(url, { headers: authHeaders(cfg) });
+
+  // Auth/handshake rejection (e.g. 401): don't hot-loop reconnecting.
+  ws.on("unexpected-response", (_req, res) => {
+    if (res.statusCode === 401) {
+      log("unauthorized (401) — bad or missing token; not reconnecting. Run: watercooler init --token <token>");
+      stopped = true;
+      try {
+        ws.close();
+      } catch {}
+    } else {
+      log(`unexpected response ${res.statusCode}`);
+    }
+  });
 
   ws.on("open", () => {
     log("connected");
@@ -85,8 +101,12 @@ function connect() {
   });
 
   ws.on("close", () => {
-    log("socket closed, reconnecting");
     clearInterval(pingTimer);
+    if (stopped) {
+      log("stopped");
+      return;
+    }
+    log("socket closed, reconnecting");
     scheduleReconnect();
   });
 
@@ -99,6 +119,7 @@ function connect() {
 }
 
 function scheduleReconnect() {
+  if (stopped) return;
   setTimeout(connect, reconnectDelay);
   reconnectDelay = Math.min(reconnectDelay * 2, 30000);
 }

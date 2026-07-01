@@ -56,11 +56,39 @@ watercooler is an open-source CLI plus a single Cloudflare Worker (with a Durabl
 
 export interface Env {
   ROOMS: DurableObjectNamespace<SessionRoom>;
+  // Shared API token (set via `wrangler secret put WATERCOOLER_TOKEN`). When
+  // present, all API calls (WS, /mem, /sync) must present it. Unset => open.
+  WATERCOOLER_TOKEN?: string;
+  // Per-IP rate limiter (Workers Rate Limiting binding).
+  API_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
+}
+
+// Constant-time string compare (avoids leaking the token via timing).
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Pull the presented token from an Authorization: Bearer header or ?token=.
+function presentedToken(req: Request, url: URL): string {
+  const auth = req.headers.get("Authorization") || "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (m) return m[1].trim();
+  return url.searchParams.get("token") || "";
 }
 
 // Curated shared memory is bounded. Keyed entries upsert in place; keyless
 // notes are the churny part that gets evicted oldest-first past this cap.
 const MAX_ENTRIES = 200;
+
+// Input caps to keep entries (and storage) sane.
+const MAX_BODY = 32 * 1024; // request body bytes
+const MAX_TEXT = 8 * 1024; // entry text chars
+const MAX_KEY = 128;
+const MAX_TAGS = 8;
+const MAX_TAG_LEN = 32;
 
 interface Agent {
   id: string;
@@ -89,10 +117,11 @@ function parseAgent(url: URL): Agent {
 }
 
 function cleanAgent(a: Partial<Agent> | undefined): Agent {
+  const cap = (v: unknown, d: string) => String(v || d).slice(0, 100);
   return {
-    id: String(a?.id || "anon"),
-    name: String(a?.name || "anon"),
-    repo: String(a?.repo || ""),
+    id: cap(a?.id, "anon"),
+    name: cap(a?.name, "anon"),
+    repo: cap(a?.repo, ""),
   };
 }
 
@@ -168,6 +197,8 @@ export class SessionRoom extends DurableObject<Env> {
 
   // POST /mem  { op:"set", key?, text, tags?, from }  |  { op:"del", key, from }
   private async handleMem(req: Request): Promise<Response> {
+    const len = Number(req.headers.get("Content-Length") || "0");
+    if (len > MAX_BODY) return new Response("payload too large", { status: 413 });
     let body: any;
     try {
       body = await req.json();
@@ -191,8 +222,11 @@ export class SessionRoom extends DurableObject<Env> {
     // default: set
     const text = String(body.text ?? "").trim();
     if (!text) return new Response("missing text", { status: 400 });
-    const key = body.key ? String(body.key) : null;
-    const tags = Array.isArray(body.tags) ? body.tags.map(String) : [];
+    if (text.length > MAX_TEXT) return new Response("text too long", { status: 413 });
+    const key = body.key ? String(body.key).slice(0, MAX_KEY) : null;
+    const tags = Array.isArray(body.tags)
+      ? body.tags.slice(0, MAX_TAGS).map((t: unknown) => String(t).slice(0, MAX_TAG_LEN))
+      : [];
     const seq = await this.nextSeq();
     const id = key || `n_${seq}`;
     const entry: Entry = { id, key, text, tags, author: from, ts: Date.now(), seq };
@@ -324,6 +358,22 @@ export default {
 
     const invite = url.searchParams.get("invite");
     if (!invite) return new Response("missing ?invite", { status: 400 });
+
+    // ---- API auth: everything below the public routes requires the token ----
+    // (enforced only when the secret is configured; unset => open, for dev + rollout)
+    if (env.WATERCOOLER_TOKEN) {
+      const tok = presentedToken(req, url);
+      if (!tok || !timingSafeEqual(tok, env.WATERCOOLER_TOKEN)) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+    }
+
+    // ---- per-IP rate limiting ----
+    if (env.API_LIMITER) {
+      const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+      const { success } = await env.API_LIMITER.limit({ key: ip });
+      if (!success) return Response.json({ error: "rate_limited" }, { status: 429 });
+    }
 
     // The invite code IS the room key: same code -> same Durable Object.
     const id = env.ROOMS.idFromName(invite);

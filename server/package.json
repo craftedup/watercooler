@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "secret:new": "node scripts/set-secret.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",
