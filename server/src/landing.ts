@@ -52,12 +52,12 @@ export const LANDING_HTML = `<!doctype html>
     --pixel: "VT323", "IBM Plex Mono", monospace;
   }
   *{ box-sizing:border-box; }
-  html{ scroll-behavior:smooth; }
+  html{ scroll-behavior:smooth; overflow-x:clip; }
   body{
     margin:0; background:var(--bg); color:var(--amber-2);
     font-family:var(--mono); font-size:clamp(14px,1.05vw,16px); line-height:1.65;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-    letter-spacing:.01em; overflow-x:hidden;
+    letter-spacing:.01em; overflow-x:clip; max-width:100vw;
   }
   ::selection{ background:var(--amber); color:var(--bg); }
   a{ color:var(--amber); text-decoration:none; border-bottom:1px solid var(--amber-4); }
@@ -96,13 +96,14 @@ export const LANDING_HTML = `<!doctype html>
   /* hero split-pane */
   .hero{ display:grid; grid-template-columns:1.05fr 1fr; gap:0;
     border-bottom:1px solid var(--line); }
-  .hero > div{ padding:clamp(34px,5vw,76px) 0; }
-  .pane-l{ padding-right:clamp(24px,3vw,48px) !important; }
+  .hero > div{ padding:clamp(34px,5vw,76px) 0; min-width:0; }
+  .pane-l{ padding-right:clamp(24px,3vw,48px) !important; container-type:inline-size; }
   .pane-r{ padding-left:clamp(24px,3vw,48px) !important; border-left:1px solid var(--line); }
 
-  .kicker{ color:var(--amber-3); font-size:.82rem; text-transform:uppercase; letter-spacing:.28em; margin:0 0 1.4rem; }
+  .kicker{ color:var(--amber-3); font-size:.82rem; text-transform:uppercase; letter-spacing:.24em; margin:0 0 1.4rem; overflow-wrap:anywhere; }
+  /* wordmark sizes to its column (cqi), so it never overflows on any screen */
   h1{ font-family:var(--pixel); font-weight:400; line-height:.92;
-    font-size:clamp(64px,11vw,148px); margin:0; color:var(--amber);
+    font-size:clamp(2.5rem,15cqi,140px); margin:0; color:var(--amber);
     text-shadow:0 0 18px var(--glow); letter-spacing:.01em; }
   h1 .drop{ display:inline-block; }
   h1 .cur{ color:var(--amber); }
@@ -114,7 +115,7 @@ export const LANDING_HTML = `<!doctype html>
   .install .lbl{ color:var(--amber-4); font-size:.78rem; letter-spacing:.18em; text-transform:uppercase; margin-bottom:.6rem; }
   .cmd{ display:flex; align-items:center; gap:1ch; border:1px solid var(--line);
     background:var(--bg-2); padding:.85em 1ch .85em 1.4ch; }
-  .cmd code{ font-family:var(--mono); font-size:clamp(13px,1.35vw,16px); color:var(--amber); white-space:nowrap; overflow-x:auto; flex:1; }
+  .cmd code{ font-family:var(--mono); font-size:clamp(12.5px,1.35vw,16px); color:var(--amber); white-space:nowrap; overflow-x:auto; flex:1 1 auto; min-width:0; }
   .cmd code .pr{ color:var(--amber-4); }
   .copy{ font-family:var(--mono); font-size:.8rem; color:var(--amber-2);
     background:transparent; border:1px solid var(--line); padding:.5em 1.1ch; cursor:pointer;
@@ -159,7 +160,7 @@ export const LANDING_HTML = `<!doctype html>
   .step .num{ font-family:var(--pixel); font-size:2.4rem; color:var(--amber-4); line-height:1; }
   .step h3{ margin:0 0 .35rem; color:var(--amber); font-weight:600; font-size:1.05rem; }
   .step p{ margin:0; color:var(--amber-3); }
-  .step code{ color:var(--amber); background:var(--bg-2); padding:.1em .6ch; border:1px solid var(--line); white-space:nowrap; }
+  .step code{ color:var(--amber); background:var(--bg-2); padding:.1em .6ch; border:1px solid var(--line); overflow-wrap:anywhere; }
 
   .cta{ padding:clamp(52px,7vw,104px) 0; }
   .cta .sec-h{ margin-bottom:1.4rem; }
