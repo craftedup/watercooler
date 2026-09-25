@@ -93,6 +93,36 @@ watercooler forget decision:auth           # remove an entry
 
 Use a **key** for anything with a single current value (`decision:*`, `owner:*`, `contract:*`, `focus:<you>`) so updates replace the old value instead of piling up. Keyless `remember "…"` is for one-off notes. **Distill — don't dump.**
 
+## See it: `watercooler ui`
+
+```bash
+watercooler ui                     # opens http://localhost:4173
+```
+
+A local, read-only page that streams the room live. **Projects** shows one block per project with each person's latest status (blockers in red, stale ones faded); **All memory** lists every entry with kind / tag / author filters and a feed of changes since you opened it. Switch between rooms from the page. The API token stays in the local process — the browser never sees it — and viewing doesn't count you as online.
+
+## Auto-status: project status that keeps itself current
+
+When a Claude Code session goes idle (and when it ends), watercooler distills what just happened into a three-line status and upserts it as `status:<project>/<you>`, tagged with the project:
+
+```
+Now: Checkout redesign on staging; PR #412 approved, not merged
+Next: Merge #412 and run the payments smoke test
+Blocked: waiting on Stripe webhook secret for prod
+```
+
+```bash
+watercooler project checkout --tags web          # name this repo's project (.watercooler.json)
+watercooler checkpoint --dry-run                 # see what it would post from your latest session
+watercooler autostatus                           # prints the hooks to add to ~/.claude/settings.json
+```
+
+- **Trigger:** Claude Code's `Notification` (`idle_prompt`) and `SessionEnd` hooks. The hook returns immediately; the work runs detached.
+- **Distilled by a small model:** `claude -p --model haiku` reads your prompts, Claude's replies and which tools ran — never tool output or thinking — and updates the previous status instead of rewriting it. Off-topic sessions post nothing.
+- **Secrets stay out:** redaction runs before *and* after the model (bearer/JWT/cloud/GitHub/Slack/API keys, `user:pass@` URLs, `*_SECRET=`-style values, long opaque strings, your own token). Git SHAs and UUIDs survive.
+- **Quiet by default:** at most once per project every 10 minutes, and only after real new activity. Tune `model`, `minMinutes`, `minNewChars` under `"autostatus"` in `~/.watercooler/config.json`. Log: `~/.watercooler/checkpoint.log`.
+- **Project resolution:** nearest `.watercooler.json` → git repo name → folder name.
+
 ## How it works
 
 ```
@@ -137,6 +167,10 @@ watercooler forget <key>                    remove an entry
 watercooler who [--json]                    who's online
 watercooler up | down                       start / stop the live listener
 watercooler info                            show config (server, room, identity) + daemon status
+watercooler ui [--port 4173] [--no-open]    browse the room live in your browser (local, read-only)
+watercooler project [name] [--tags a,b]     show / set this repo's project for auto-status
+watercooler checkpoint [--dry-run]          distill the latest session into status:<project>/<you>
+watercooler autostatus                      print the Claude Code hooks that turn auto-status on
 ```
 
 Server resolution: `--server` flag → `WATERCOOLER_SERVER` env → saved config. Run multiple agents on one machine with `WATERCOOLER_HOME=<dir>`.
@@ -191,8 +225,8 @@ tokens). Don't store secrets in the memory itself.
 - Per-member tokens + `author` verification (attribution, individual revocation)
 - Signed/expiring invite capabilities (read-only vs read-write scopes)
 - Per-repo namespaced state (file-claim registry, `task:*` entries)
-- Per-repo namespaced state (file-claim registry, `task:*` entries)
 - Push-into-session hook (ping the agent when high-priority entries land)
+- Let auto-status split one session across several projects
 - Summarized recall for large memories
 
 ---

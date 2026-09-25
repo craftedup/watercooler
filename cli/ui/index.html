@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>watercooler</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ffb454'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17120b;
+    --panel: #1f1810;
+    --raise: #2a2116;
+    --line: #3a2e1f;
+    --text: #efe6d8;
+    --muted: #a8977f;
+    --faint: #75664f;
+    --amber: #ffb454;
+    --amber-dim: rgba(255, 180, 84, 0.14);
+    --ok: #8fcf8a;
+    --bad: #f08a6c;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  /* ---------- top bar ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .mark { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; }
+  .drop {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--faint);
+    transition: background .3s;
+  }
+  .drop.live { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-dim); }
+  .drop.bad { background: var(--bad); }
+  .room {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 2px 4px 2px 10px;
+  }
+  .room select {
+    background: transparent; border: 0; font-family: var(--mono); font-size: 14px;
+    padding: 6px 4px; cursor: pointer;
+  }
+  .room select option { background: var(--panel); }
+  .search {
+    flex: 1 1 260px; min-width: 0;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .search::placeholder { color: var(--faint); }
+  .count { color: var(--muted); font-size: 14px; white-space: nowrap; }
+
+  /* ---------- layout ---------- */
+  .wrap {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) 300px;
+    gap: 0;
+    min-height: calc(100vh - 62px);
+  }
+  aside { padding: 20px 20px 40px; }
+  .rail { border-right: 1px solid var(--line); }
+  .side { border-left: 1px solid var(--line); }
+  main { padding: 20px 28px 60px; min-width: 0; }
+
+  .group { margin-bottom: 26px; }
+  .group h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .facet {
+    display: flex; justify-content: space-between; gap: 8px; width: 100%;
+    background: none; border: 0; border-radius: 6px;
+    padding: 4px 8px; margin: 0 -8px; width: calc(100% + 16px);
+    text-align: left; cursor: pointer; color: var(--text);
+  }
+  .facet:hover { background: var(--panel); }
+  .facet[aria-pressed="true"] { background: var(--amber-dim); color: var(--amber); }
+  .facet .n { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .facet[aria-pressed="true"] .n { color: var(--amber); }
+  .facet .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mono { font-family: var(--mono); font-size: 13.5px; }
+  .clear {
+    background: none; border: 0; padding: 0; color: var(--amber); cursor: pointer; font-size: 14px;
+  }
+
+  /* ---------- entries ---------- */
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+  .filters:empty { display: none; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--amber-dim); color: var(--amber);
+    border: 0; border-radius: 999px; padding: 2px 10px; cursor: pointer; font-size: 13.5px;
+  }
+  .list { display: flex; flex-direction: column; }
+  .entry {
+    position: relative;
+    padding: 16px 16px 16px 18px;
+    border-bottom: 1px solid var(--line);
+    border-left: 2px solid transparent;
+    transition: border-color 1.6s, background 1.6s;
+  }
+  .entry.flash { border-left-color: var(--amber); background: var(--amber-dim); transition: none; }
+  .entry.fresh { border-left-color: var(--amber); }
+  .entry.gone { opacity: .45; }
+  .entry.gone .text { text-decoration: line-through; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .key { font-family: var(--mono); font-size: 14px; color: var(--amber); word-break: break-all; }
+  .key .kind { color: var(--muted); }
+  .key.note { color: var(--muted); font-style: italic; font-family: var(--sans); }
+  .when { color: var(--faint); font-size: 13px; white-space: nowrap; }
+  .text {
+    margin: 0; max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .entry.open .text { display: block; }
+  .more {
+    background: none; border: 0; padding: 0; margin-top: 4px;
+    color: var(--muted); font-size: 13px; cursor: pointer;
+  }
+  .more:hover { color: var(--amber); }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .tag {
+    background: var(--raise); border: 0; border-radius: 4px;
+    padding: 1px 7px; font-size: 12.5px; color: var(--muted); cursor: pointer;
+  }
+  .tag:hover { color: var(--amber); }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .empty { padding: 60px 0; color: var(--muted); max-width: 46ch; }
+  .empty strong { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; font-weight: 600; }
+  .error { color: var(--bad); }
+
+  /* ---------- right side ---------- */
+  .who { list-style: none; margin: 0; padding: 0; }
+  .who li { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .who .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; transform: translateY(-1px); }
+  .who .repo { color: var(--faint); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .feed li:last-child { border-bottom: 0; }
+  .feed .what { color: var(--muted); }
+  .feed button { background: none; border: 0; padding: 0; cursor: pointer; font-family: var(--mono); font-size: 13px; color: var(--amber); text-align: left; word-break: break-all; }
+  .feed .del { color: var(--bad); font-family: var(--mono); font-size: 13px; word-break: break-all; }
+  .feed .t { color: var(--faint); font-size: 12.5px; }
+  .quiet { color: var(--faint); font-size: 14px; margin: 0; }
+
+  .addroom { display: flex; gap: 6px; margin-top: 8px; }
+  .addroom input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-family: var(--mono); font-size: 13px; }
+  .addroom button { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+  .roomlist { list-style: none; margin: 0; padding: 0; }
+  .roomlist li { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .roomlist .x { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 2px 6px; }
+  .roomlist .x:hover { color: var(--bad); }
+  .roomlist .go { background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--muted); text-align: left; word-break: break-all; }
+  .roomlist .go:hover, .roomlist .go.on { color: var(--text); }
+  .roomlist .home { color: var(--faint); font-size: 12.5px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .tab {
+    background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    padding: 6px 2px; margin-right: 18px; cursor: pointer; color: var(--muted); font-weight: 500;
+  }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
+  .tab .n { color: var(--faint); font-weight: 400; margin-left: 4px; }
+
+  .project { padding: 4px 0 26px; }
+  .project + .project { border-top: 1px solid var(--line); padding-top: 22px; }
+  .phead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px; }
+  .pname { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .pmore { background: none; border: 0; padding: 0; cursor: pointer; color: var(--muted); font-size: 13.5px; }
+  .pmore:hover { color: var(--amber); }
+  .person { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 20px; padding: 10px 0; }
+  .person + .person { border-top: 1px dashed var(--line); }
+  .pwho { font-size: 14px; }
+  .pwho .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; transform: translateY(-1px); }
+  .pwho .age { display: block; color: var(--faint); font-size: 13px; }
+  .pwho .auto { color: var(--faint); font-size: 12.5px; }
+  .lines { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 3px 10px; margin: 0; max-width: 84ch; }
+  .lines dt { color: var(--muted); font-size: 13.5px; padding-top: 1px; }
+  .lines dd { margin: 0; overflow-wrap: anywhere; }
+  .lines .blocked { color: var(--bad); }
+  .plain {
+    margin: 0; max-width: 78ch; white-space: pre-wrap; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer;
+  }
+  .person.open .plain { display: block; cursor: auto; }
+  .person.stale { opacity: .55; }
+  .person.flash { background: var(--amber-dim); }
+
+  .toggle { display: none; }
+
+  @media (max-width: 1100px) {
+    .wrap { grid-template-columns: 200px minmax(0, 1fr); }
+    .side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 32px; }
+  }
+  @media (max-width: 720px) {
+    .bar { padding: 10px 16px; gap: 10px; }
+    .wrap { grid-template-columns: minmax(0, 1fr); }
+    .rail { border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; }
+    .rail .groups { display: none; }
+    .rail.show .groups { display: block; margin-top: 14px; }
+    .toggle { display: inline-block; background: none; border: 0; padding: 0; color: var(--amber); cursor: pointer; }
+    main { padding: 12px 16px 40px; }
+    .side { padding: 16px; }
+    .entry { padding: 14px 4px 14px 12px; }
+    .person { grid-template-columns: minmax(0, 1fr); }
+    .pwho .age { display: inline; margin-left: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entry, .drop { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="mark"><span class="drop" id="drop" title="Connecting"></span>watercooler</div>
+  <label class="room" title="Room">
+    <span class="count">Room</span>
+    <select id="roomSelect" aria-label="Room"></select>
+  </label>
+  <input class="search" id="q" type="search" placeholder="Search keys, text, tags, people" autocomplete="off">
+  <span class="count" id="count"></span>
+</header>
+
+<div class="wrap">
+  <aside class="rail" id="rail">
+    <button class="toggle" id="railToggle" aria-expanded="false">Filters</button>
+    <div class="groups">
+      <div class="group"><h2>Kind</h2><div id="fKind"></div></div>
+      <div class="group"><h2>Tag</h2><div id="fTag"></div></div>
+      <div class="group"><h2>Written by</h2><div id="fAuthor"></div></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tabProjects" data-view="projects">Projects<span class="n" id="nProjects"></span></button>
+      <button class="tab" role="tab" id="tabMemory" data-view="memory">All memory<span class="n" id="nMemory"></span></button>
+    </div>
+    <div class="filters" id="active"></div>
+    <div class="list" id="list"></div>
+  </main>
+
+  <aside class="side">
+    <div class="group">
+      <h2>Online now</h2>
+      <ul class="who" id="who"></ul>
+    </div>
+    <div class="group">
+      <h2>Changes since you opened this</h2>
+      <ul class="feed" id="feed"></ul>
+    </div>
+    <div class="group">
+      <h2>Rooms</h2>
+      <ul class="roomlist" id="rooms"></ul>
+      <form class="addroom" id="addRoom">
+        <input id="newRoom" placeholder="room code" aria-label="Room code to add">
+        <button type="submit">Add</button>
+      </form>
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const state = {
+    room: null, home: null, rooms: [],
+    entries: new Map(), agents: [], feed: [],
+    gone: new Set(), fresh: new Set(), open: new Set(),
+    filter: { kind: null, tag: null, author: null }, q: "",
+    es: null, snapshotLoaded: false, view: "projects",
+  };
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  const kindOf = (e) => (e.key ? (e.key.includes(":") ? e.key.slice(0, e.key.indexOf(":")) : "other") : "note");
+
+  function ago(ts) {
+    const s = Math.max(0, (Date.now() - ts) / 1000);
+    if (s < 45) return "just now";
+    const m = s / 60; if (m < 60) return Math.round(m) + "m ago";
+    const h = m / 60; if (h < 24) return Math.round(h) + "h ago";
+    const d = h / 24; if (d < 14) return Math.round(d) + "d ago";
+    return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  const fullTime = (ts) => new Date(ts).toLocaleString();
+
+  // ---------- filtering ----------
+  function matches(e, skip) {
+    const f = state.filter;
+    if (skip !== "kind" && f.kind && kindOf(e) !== f.kind) return false;
+    if (skip !== "tag" && f.tag && !(e.tags || []).includes(f.tag)) return false;
+    if (skip !== "author" && f.author && e.author?.name !== f.author) return false;
+    if (state.q) {
+      const hay = [e.key, e.text, (e.tags || []).join(" "), e.author?.name, e.author?.repo].join(" ").toLowerCase();
+      if (!state.q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  }
+
+  function visible() {
+    const all = [...state.entries.values()];
+    for (const id of state.gone) if (!state.entries.has(id)) all.push(state.goneEntries?.get(id));
+    return all.filter(Boolean).filter((e) => matches(e)).sort((a, b) => b.ts - a.ts);
+  }
+
+  // Facet counts respect the other active filters, so numbers never promise
+  // results the list can't show.
+  function facet(el, name, valueOf) {
+    const counts = new Map();
+    for (const e of state.entries.values()) {
+      if (!matches(e, name)) continue;
+      for (const v of [].concat(valueOf(e))) if (v) counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    const cur = state.filter[name];
+    if (cur && !counts.has(cur)) counts.set(cur, 0);
+    const rows = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    el.innerHTML = rows.length
+      ? rows.map(([v, n]) => `<button class="facet" data-f="${name}" data-v="${esc(v)}" aria-pressed="${cur === v}"><span class="label${name === "author" ? "" : " mono"}">${esc(v)}</span><span class="n">${n}</span></button>`).join("")
+      : `<p class="quiet">None</p>`;
+  }
+
+  // ---------- rendering ----------
+  function entryHtml(e) {
+    const gone = state.gone.has(e.id) && !state.entries.has(e.id);
+    const cls = ["entry", state.fresh.has(e.id) ? "fresh" : "", gone ? "gone" : "", state.open.has(e.id) ? "open" : ""].join(" ");
+    let key;
+    if (e.key) {
+      const i = e.key.indexOf(":");
+      key = i > 0
+        ? `<span class="key"><span class="kind">${esc(e.key.slice(0, i + 1))}</span>${esc(e.key.slice(i + 1))}</span>`
+        : `<span class="key">${esc(e.key)}</span>`;
+    } else key = `<span class="key note">Note</span>`;
+    const long = e.text.length > 320 || (e.text.match(/\n/g) || []).length > 3;
+    return `<article class="${cls}" data-id="${esc(e.id)}">
+      <div class="head">${key}<span class="when" title="${esc(fullTime(e.ts))}">${gone ? "removed" : esc(ago(e.ts))}</span></div>
+      <p class="text">${esc(e.text)}</p>
+      ${long ? `<button class="more" data-toggle="${esc(e.id)}">${state.open.has(e.id) ? "Show less" : "Show all"}</button>` : ""}
+      <div class="meta">
+        <span>${esc(e.author?.name || "anon")}${e.author?.repo ? ` <span style="color:var(--faint)">in ${esc(e.author.repo)}</span>` : ""}</span>
+        ${(e.tags || []).length ? `<span class="tags">${e.tags.map((t) => `<button class="tag" data-f="tag" data-v="${esc(t)}">${esc(t)}</button>`).join("")}</span>` : ""}
+      </div>
+    </article>`;
+  }
+
+  function renderList() {
+    const rows = visible();
+    const total = state.entries.size;
+    const shown = rows.filter((e) => state.entries.has(e.id)).length;
+    $("count").textContent = total ? (shown === total ? `${total} entries` : `${shown} of ${total}`) : "";
+    if (!state.snapshotLoaded) { $("list").innerHTML = `<div class="empty">Loading the room…</div>`; return; }
+    if (!total) {
+      $("list").innerHTML = `<div class="empty"><strong>This room has no memory yet</strong>Agents add entries with <span class="mono">watercooler remember</span>. They'll appear here as they're written.</div>`;
+      return;
+    }
+    $("list").innerHTML = rows.length
+      ? rows.map(entryHtml).join("")
+      : `<div class="empty"><strong>Nothing matches</strong>Try a shorter search or <button class="clear" data-clear>clear the filters</button>.</div>`;
+  }
+
+  function renderActive() {
+    const f = state.filter;
+    const pills = Object.entries(f).filter(([, v]) => v).map(([k, v]) =>
+      `<button class="pill" data-f="${k}" data-v="${esc(v)}" title="Remove filter">${k === "author" ? "by " : ""}${esc(v)} <span aria-hidden="true">×</span></button>`);
+    $("active").innerHTML = pills.length ? pills.join("") + `<button class="clear" data-clear>Clear all</button>` : "";
+  }
+
+  function renderFacets() {
+    facet($("fKind"), "kind", kindOf);
+    facet($("fTag"), "tag", (e) => e.tags || []);
+    facet($("fAuthor"), "author", (e) => e.author?.name);
+  }
+
+  function renderWho() {
+    const a = state.agents;
+    $("who").innerHTML = a.length
+      ? a.map((x) => `<li><span class="dot"></span><span>${esc(x.name)}</span><span class="repo">${esc(x.repo || "")}</span></li>`).join("")
+      : `<li class="quiet">No one is connected.</li>`;
+  }
+
+  function renderFeed() {
+    $("feed").innerHTML = state.feed.length
+      ? state.feed.slice(0, 40).map((f) => `<li>
+          ${f.op === "del" ? `<span class="del">${esc(f.id)}</span>` : `<button data-jump="${esc(f.id)}">${esc(f.id)}</button>`}
+          <div><span class="what">${esc(f.who)} ${f.op === "del" ? "removed it" : f.isNew ? "added it" : "updated it"}</span> <span class="t" data-ts="${f.ts}">${esc(ago(f.ts))}</span></div>
+        </li>`).join("")
+      : `<li class="quiet">Quiet so far. New and updated entries show up here.</li>`;
+  }
+
+  function renderRooms() {
+    $("roomSelect").innerHTML = state.rooms.map((r) => `<option value="${esc(r)}"${r === state.room ? " selected" : ""}>${esc(r)}</option>`).join("");
+    $("rooms").innerHTML = state.rooms.map((r) => `<li><button class="go mono${r === state.room ? " on" : ""}" data-go="${esc(r)}"${r === state.room ? ' aria-current="true"' : ""}>${esc(r)}</button>${r === state.home ? `<span class="home">your agents' room</span>` : `<button class="x" data-rm="${esc(r)}" aria-label="Remove ${esc(r)}">×</button>`}</li>`).join("");
+  }
+
+  // ---------- projects ----------
+  // A status entry is `status:<project>/<person>` (auto-status) or a hand-written
+  // `status:<project>`. Every other entry tagged with the project counts toward it.
+  function statusParts(e) {
+    if (!e.key || !e.key.startsWith("status:")) return null;
+    const rest = e.key.slice(7);
+    const i = rest.indexOf("/");
+    return i > 0
+      ? { project: rest.slice(0, i), person: rest.slice(i + 1) }
+      : { project: rest, person: e.author?.name || "anon" };
+  }
+
+  function parseLines(text) {
+    const out = [];
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*(Now|Next|Blocked)\s*:\s*(.*)$/i);
+      if (!m) return null;
+      out.push([m[1][0].toUpperCase() + m[1].slice(1).toLowerCase(), m[2]]);
+    }
+    return out.length ? out : null;
+  }
+
+  function projects() {
+    const map = new Map();
+    for (const e of state.entries.values()) {
+      const p = statusParts(e);
+      if (!p) continue;
+      if (!map.has(p.project)) map.set(p.project, { name: p.project, people: [], ts: 0 });
+      const g = map.get(p.project);
+      g.people.push({ ...p, e });
+      g.ts = Math.max(g.ts, e.ts);
+    }
+    for (const g of map.values()) {
+      g.people.sort((a, b) => b.e.ts - a.e.ts);
+      g.related = [...state.entries.values()].filter((e) => !statusParts(e) && (e.tags || []).includes(g.name)).length;
+    }
+    return [...map.values()].sort((a, b) => b.ts - a.ts);
+  }
+
+  function renderProjects() {
+    const online = new Set(state.agents.map((a) => a.name));
+    let list = projects();
+    $("nProjects").textContent = list.length || "";
+    if (state.q) list = list.filter((g) => [g.name, ...g.people.map((p) => p.person + " " + p.e.text)].join(" ").toLowerCase().includes(state.q));
+    if (!state.snapshotLoaded) { $("list").innerHTML = `<div class="empty">Loading the room…</div>`; return; }
+    if (!list.length) {
+      $("list").innerHTML = state.q
+        ? `<div class="empty"><strong>No project matches</strong>Try a shorter search.</div>`
+        : `<div class="empty"><strong>No project statuses yet</strong>Statuses appear here when agents write a <span class="mono">status:&lt;project&gt;</span> entry. Turn on auto-status with <span class="mono">watercooler autostatus</span> and they'll keep themselves current.</div>`;
+      return;
+    }
+    const STALE = 3 * 864e5;
+    $("list").innerHTML = list.map((g) => `<section class="project">
+      <div class="phead"><h2 class="pname">${esc(g.name)}</h2>
+        ${g.related ? `<button class="pmore" data-proj="${esc(g.name)}">${g.related} related ${g.related === 1 ? "entry" : "entries"}</button>` : ""}
+      </div>
+      ${g.people.map((p) => {
+        const lines = parseLines(p.e.text);
+        const body = lines
+          ? `<dl class="lines">${lines.map(([k, v]) => `<dt>${k}</dt><dd${k === "Blocked" && !/^(nothing|none|no)\b/i.test(v) ? ' class="blocked"' : ""}>${esc(v)}</dd>`).join("")}</dl>`
+          : `<p class="plain">${esc(p.e.text)}</p>`;
+        return `<div class="person${Date.now() - p.e.ts > STALE ? " stale" : ""}" data-sid="${esc(p.e.id)}">
+          <div class="pwho">${online.has(p.person) || online.has(p.e.author?.name) ? '<span class="dot" title="Online now"></span>' : ""}${esc(p.person)}
+            <span class="age" title="${esc(fullTime(p.e.ts))}">${esc(ago(p.e.ts))}${(p.e.tags || []).includes("auto") ? ' <span class="auto">· auto</span>' : ""}</span></div>
+          ${body}
+        </div>`;
+      }).join("")}
+    </section>`).join("");
+  }
+
+  function renderMain() {
+    $("tabProjects").setAttribute("aria-selected", state.view === "projects");
+    $("tabMemory").setAttribute("aria-selected", state.view === "memory");
+    $("nMemory").textContent = state.entries.size || "";
+    if (state.view === "projects") { $("active").innerHTML = ""; renderProjects(); $("count").textContent = ""; }
+    else { renderActive(); renderList(); }
+  }
+
+  function renderAll() { renderFacets(); renderMain(); renderWho(); renderFeed(); }
+
+  function flash(id) {
+    requestAnimationFrame(() => {
+      const row = document.querySelector(`.person[data-sid="${CSS.escape(id)}"]`);
+      if (row) { row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1600); }
+      const el = document.querySelector(`.entry[data-id="${CSS.escape(id)}"]`);
+      if (!el) return;
+      el.classList.add("flash");
+      setTimeout(() => el.classList.remove("flash"), 60);
+    });
+  }
+
+  // ---------- live stream ----------
+  function setConn(status, title) {
+    const d = $("drop");
+    d.className = "drop" + (status === "live" ? " live" : status === "bad" ? " bad" : "");
+    d.title = title;
+  }
+
+  function connect(room) {
+    state.es?.close();
+    if (room !== state.room) { state.filter = { kind: null, tag: null, author: null }; state.q = ""; $("q").value = ""; state.open = new Set(); }
+    Object.assign(state, { room, entries: new Map(), agents: [], feed: [], gone: new Set(), fresh: new Set(), goneEntries: new Map(), snapshotLoaded: false });
+    store.set("wc.room", room);
+    renderRooms(); renderAll();
+    setConn("wait", "Connecting");
+
+    const es = new EventSource(`/api/stream?room=${encodeURIComponent(room)}`);
+    state.es = es;
+    es.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.type === "connected") setConn("live", "Live");
+      else if (m.type === "disconnected") setConn("wait", "Reconnecting");
+      else if (m.type === "error") {
+        setConn("bad", m.message);
+        if (m.fatal) {
+          es.close();
+          $("list").innerHTML = `<div class="empty error"><strong>Couldn't open this room</strong>${esc(m.message)}</div>`;
+        }
+      } else if (m.type === "snapshot") {
+        state.entries = new Map((m.entries || []).map((e) => [e.id, e]));
+        state.agents = m.agents || [];
+        state.snapshotLoaded = true;
+        renderAll();
+      } else if (m.type === "presence") {
+        state.agents = m.agents || [];
+        renderWho();
+        if (state.view === "projects") renderProjects();
+      } else if (m.type === "mem") {
+        const who = m.from?.name || "someone";
+        if (m.op === "set" && m.entry) {
+          const isNew = !state.entries.has(m.entry.id);
+          state.entries.set(m.entry.id, m.entry);
+          state.gone.delete(m.entry.id);
+          state.fresh.add(m.entry.id);
+          state.feed.unshift({ op: "set", id: m.entry.id, who, ts: m.ts || Date.now(), isNew });
+          renderAll(); flash(m.entry.id);
+        } else if (m.op === "del") {
+          const old = state.entries.get(m.id);
+          if (old) state.goneEntries.set(m.id, old);
+          state.entries.delete(m.id);
+          state.gone.add(m.id);
+          state.feed.unshift({ op: "del", id: m.id, who, ts: m.ts || Date.now() });
+          renderAll();
+        }
+      }
+    };
+    es.onerror = () => { if (es.readyState !== EventSource.CLOSED) setConn("wait", "Reconnecting"); };
+  }
+
+  // ---------- interactions ----------
+  function setFilter(name, v) {
+    state.filter[name] = state.filter[name] === v ? null : v;
+    renderAll();
+  }
+
+  document.addEventListener("click", (ev) => {
+    const plain = ev.target.closest(".plain");
+    if (plain) { plain.closest(".person").classList.add("open"); return; }
+    const t = ev.target.closest("button");
+    if (!t) return;
+    if (t.dataset.view) { state.view = t.dataset.view; store.set("wc.view", state.view); return renderAll(); }
+    if (t.dataset.proj) { state.view = "memory"; state.filter = { kind: null, tag: t.dataset.proj, author: null }; return renderAll(); }
+    if (t.dataset.f) { if (state.view !== "memory") { state.view = "memory"; state.filter = { kind: null, tag: null, author: null }; } return setFilter(t.dataset.f, t.dataset.v); }
+    if (t.hasAttribute("data-clear")) { state.filter = { kind: null, tag: null, author: null }; state.q = ""; $("q").value = ""; return renderAll(); }
+    if (t.dataset.toggle) {
+      const id = t.dataset.toggle;
+      state.open.has(id) ? state.open.delete(id) : state.open.add(id);
+      return renderMain();
+    }
+    if (t.dataset.jump) {
+      const id = t.dataset.jump;
+      state.filter = { kind: null, tag: null, author: null }; state.q = ""; $("q").value = "";
+      state.view = "memory"; state.open.add(id); renderAll();
+      const el = document.querySelector(`.entry[data-id="${CSS.escape(id)}"]`);
+      el?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      return flash(id);
+    }
+    if (t.dataset.rm) return removeRoom(t.dataset.rm);
+    if (t.dataset.go && t.dataset.go !== state.room) return connect(t.dataset.go);
+  });
+
+  let qTimer;
+  $("q").addEventListener("input", (e) => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { state.q = e.target.value.trim().toLowerCase(); renderAll(); }, 120);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== $("q") && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $("q").focus(); }
+    if (e.key === "Escape" && document.activeElement === $("q")) { $("q").value = ""; state.q = ""; renderAll(); $("q").blur(); }
+  });
+
+  $("roomSelect").addEventListener("change", (e) => connect(e.target.value));
+  $("railToggle").addEventListener("click", () => {
+    const r = $("rail"); r.classList.toggle("show");
+    $("railToggle").setAttribute("aria-expanded", r.classList.contains("show"));
+  });
+
+  $("addRoom").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const raw = $("newRoom").value.trim();
+    const code = raw.includes("/join/") ? raw.split("/join/").pop().split(/[?#]/)[0] : raw;
+    if (!code) return;
+    const r = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const body = await r.json();
+    if (!r.ok) { $("newRoom").setCustomValidity(body.error); $("newRoom").reportValidity(); return; }
+    $("newRoom").value = "";
+    state.rooms = body.rooms;
+    connect(code);
+  });
+  $("newRoom").addEventListener("input", () => $("newRoom").setCustomValidity(""));
+
+  async function removeRoom(code) {
+    const r = await fetch(`/api/rooms?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+    state.rooms = (await r.json()).rooms;
+    if (state.room === code) connect(state.home); else renderRooms();
+  }
+
+  // Keep relative times honest without re-rendering the whole list.
+  setInterval(() => {
+    document.querySelectorAll(".entry").forEach((el) => {
+      const e = state.entries.get(el.dataset.id);
+      if (e) el.querySelector(".when").textContent = ago(e.ts);
+    });
+    document.querySelectorAll(".feed .t").forEach((el) => { el.textContent = ago(+el.dataset.ts); });
+  }, 30000);
+
+  // ---------- boot ----------
+  if (store.get("wc.view") === "memory") state.view = "memory";
+  fetch("/api/rooms").then((r) => r.json()).then((info) => {
+    state.home = info.current;
+    state.rooms = info.rooms;
+    const last = store.get("wc.room");
+    connect(last && info.rooms.includes(last) ? last : info.current);
+  }).catch(() => {
+    setConn("bad", "The local UI server isn't running");
+    $("list").innerHTML = `<div class="empty error"><strong>The local server stopped</strong>Run <span class="mono">watercooler ui</span> again.</div>`;
+  });
+})();
+</script>
+</body>
+</html>

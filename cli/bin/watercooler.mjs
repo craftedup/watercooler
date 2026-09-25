@@ -79,6 +79,14 @@ async function main() {
       return cmdWho();
     case "info":
       return cmdInfo();
+    case "ui":
+      return cmdUi();
+    case "checkpoint":
+      return cmdCheckpoint();
+    case "project":
+      return cmdProject();
+    case "autostatus":
+      return cmdAutostatus();
     case "help":
     case undefined:
     case "--help":
@@ -89,6 +97,81 @@ async function main() {
       printHelp();
       process.exit(1);
   }
+}
+
+async function cmdUi() {
+  const { startUi } = await import("../src/ui.mjs");
+  const port = flags.port ? parseInt(flags.port, 10) : 4173;
+  startUi({ port, open: !flags["no-open"] });
+}
+
+async function cmdCheckpoint() {
+  const cp = await import("../src/checkpoint.mjs");
+  if (flags.hook) return cp.fromHook();
+  let transcript = flags.transcript;
+  if (!transcript) {
+    // Manual run: use the most recent session transcript for this folder.
+    const dir = path.join(os.homedir(), ".claude", "projects", process.cwd().replace(/[^A-Za-z0-9]/g, "-"));
+    const files = fs.existsSync(dir)
+      ? fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl")).map((f) => path.join(dir, f))
+      : [];
+    transcript = files.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    if (!transcript) {
+      console.error(`No Claude Code transcript found for ${process.cwd()}. Pass --transcript <file.jsonl>.`);
+      process.exit(1);
+    }
+  }
+  const dryRun = flags["show-prompt"] ? "prompt" : !!flags["dry-run"];
+  try {
+    const r = await cp.checkpoint({
+      transcript,
+      session: flags.session,
+      cwd: flags.cwd,
+      now: !!flags.now || !flags.session, // manual runs ignore the rate limit
+      dryRun,
+      final: !!flags.final,
+    });
+    if (flags.session && !process.stdout.isTTY) return; // hook child: the log has it
+    if (r.prompt) return console.log(r.prompt);
+    if (r.skipped) return console.log(`Skipped ${r.key || ""}: ${r.skipped}`);
+    console.log(`${r.dryRun ? "Would post" : "Posted"} ${r.key}  [${r.tags.concat("status", "auto").join(", ")}]\n\n${r.status}`);
+  } catch (e) {
+    console.error(`checkpoint failed: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+async function cmdProject() {
+  const cp = await import("../src/checkpoint.mjs");
+  const name = positionals[0];
+  if (name) {
+    const tags = typeof flags.tags === "string" ? flags.tags.split(",").map((t) => t.trim()) : [];
+    const file = cp.writeProjectFile(process.cwd(), name, tags);
+    console.log(`Wrote ${file}`);
+  }
+  const r = cp.resolveProject(process.cwd());
+  const cfg = readConfig();
+  console.log(`project: ${r.project}${r.tags.length ? `   tags: ${r.tags.join(", ")}` : ""}\nfrom:    ${r.source}`);
+  if (cfg?.name) console.log(`status key: status:${r.project}/${cfg.name.toLowerCase()}`);
+}
+
+async function cmdAutostatus() {
+  const cp = await import("../src/checkpoint.mjs");
+  const cfg = readConfig();
+  const opts = cp.settings(cfg);
+  console.log(`Auto-status posts a 3-line project status when a Claude Code session goes idle
+(and when it ends), as status:<project>/<you>, tagged with the project.
+
+Turn it on by merging this into ~/.claude/settings.json (or run /hooks in Claude Code):
+
+${JSON.stringify(cp.hookSnippet(), null, 2)}
+
+Current settings (override under "autostatus" in ${paths.config}):
+  model ${opts.model} · at most every ${opts.minMinutes}m per project · needs ${opts.minNewChars}+ chars of new activity
+
+Name the project for a repo:   watercooler project <name> [--tags a,b]
+Try it by hand first:          watercooler checkpoint --dry-run
+Log:                           ${path.join(paths.home, "checkpoint.log")}`);
 }
 
 // One-time onboarding: install the Claude skill + /watercooler command, and
@@ -527,6 +610,12 @@ Recall:
 
 Misc:
   watercooler info               Show config + daemon status
+  watercooler ui [--port 4173] [--no-open]   Browse the shared memory live in your browser (local, read-only)
+
+Auto-status (project status that keeps itself current):
+  watercooler project [name] [--tags a,b]   Show or set this repo's project (writes .watercooler.json)
+  watercooler checkpoint [--dry-run]        Distill the latest session into status:<project>/<you> now
+  watercooler autostatus                    How to turn on the idle/session-end hooks
 
 Env:
   WATERCOOLER_HOME   Override config dir (run multiple agents on one machine)`);
