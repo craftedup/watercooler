@@ -4,6 +4,9 @@ import { OG_PNG_BASE64 } from "./og";
 
 const SITE = "https://watercooler.craftedup.com";
 
+// The amber-drop icon — same mark the landing page inlines as its favicon.
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M32 6C32 6 52 32 52 44a20 20 0 1 1-40 0C12 32 32 6 32 6Z" fill="#ffb454"/></svg>`;
+
 const ROBOTS_TXT = `User-agent: *
 Allow: /
 
@@ -317,6 +320,11 @@ export default {
       const bytes = Uint8Array.from(atob(OG_PNG_BASE64), (c) => c.charCodeAt(0));
       return new Response(bytes, {
         headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+    if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") {
+      return new Response(FAVICON_SVG, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=86400" },
       });
     }
     if (url.pathname === "/robots.txt") {

@@ -153,8 +153,8 @@ cd .. && ./demo.sh               # two agents sharing a memory (via WATERCOOLER_
 ## Securing your server
 
 The API (WebSocket, `/mem`, `/sync`) can be gated behind a **shared token**. The
-public pages (`/`, `/og.png`, `/robots.txt`, `/sitemap.xml`, `/llms.txt`,
-`/join/...`, `/health`) always stay open.
+public pages (`/`, `/og.png`, `/favicon.svg`, `/robots.txt`, `/sitemap.xml`,
+`/llms.txt`, `/join/...`, `/health`) always stay open.
 
 **Admin — create the token (one time):** requires Cloudflare access to the account,
 so only you can create or rotate it. It's stored as a Worker secret, never in the repo.
